@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { FluxChart } from './FluxChart';
 import HelioView from './HelioView';
 
 export default function Home() {
@@ -10,6 +11,7 @@ export default function Home() {
   return (
     <main className="min-h-screen flex flex-col content-center justify-around gap-4">
       {timestamp && <HelioView timestamp={timestamp} />}
+      <FluxChart onTimeSelect={setTimestamp} />
     </main>
   );
 }
