@@ -1,0 +1,14 @@
+services:
+  db:
+    image: timescale/timescaledb:2.15.2-pg16
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      start_period: 10s
+      interval: 10s
+      retries: 10
+    ports:
+      - ${EXTERNAL_DATABASE_PORT:-5432}:5432
+    environment:
+      - POSTGRES_USER=${DATABASE_USERNAME:-postgres}
+      - POSTGRES_DB=${DATABASE_DATABASE:-postgres}
