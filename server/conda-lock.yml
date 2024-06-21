@@ -13,7 +13,7 @@
 version: 1
 metadata:
   content_hash:
-    linux-64: c14f4f48a8a86bfc3a345f2db848e5a79dfb7db160785558038803064abeb0f2
+    linux-64: a5c6b85fb8c147804910f25a8cde2c605161fe609c89c82d673403955e770d18
   channels:
   - url: conda-forge
     used_env_vars: []
@@ -2511,6 +2511,20 @@ package:
     sha256: 502f6ff148ac2777cc55ae4ade01a8fc3543b4ffab25c4e0eaa15f94e90dd997
   category: main
   optional: false
+- name: libpq
+  version: '16.3'
+  manager: conda
+  platform: linux-64
+  dependencies:
+    krb5: '>=1.21.2,<1.22.0a0'
+    libgcc-ng: '>=12'
+    openssl: '>=3.3.0,<4.0a0'
+  url: https://conda.anaconda.org/conda-forge/linux-64/libpq-16.3-ha72fbe1_0.conda
+  hash:
+    md5: bac737ae28b79cfbafd515258d97d29e
+    sha256: 117ba1e11f07b1ca0671641bd6d1f2e7fc6e27db1c317a0cdb4799ffa69f47db
+  category: main
+  optional: false
 - name: libprotobuf
   version: 4.25.3
   manager: conda
@@ -3219,6 +3233,21 @@ package:
   hash:
     md5: 3facaca6cc0f7988df3250efccd32da3
     sha256: 27e7f8f5d30c74439f39d61e21ac14c0cd03b5d55f7bf9f946fb619016f73c61
+  category: main
+  optional: false
+- name: psycopg2
+  version: 2.9.9
+  manager: conda
+  platform: linux-64
+  dependencies:
+    libgcc-ng: '>=12'
+    libpq: '>=16.1,<17.0a0'
+    python: '>=3.12,<3.13.0a0'
+    python_abi: 3.12.*
+  url: https://conda.anaconda.org/conda-forge/linux-64/psycopg2-2.9.9-py312h08590aa_0.conda
+  hash:
+    md5: 04c845846381625e95c88d013edfda21
+    sha256: f2c21db09e411331a9d741b46ecbc6f4ee3571f173c6014ceac0cbbc17eb5e5b
   category: main
   optional: false
 - name: pthread-stubs

@@ -10,5 +10,6 @@ dependencies:
   - typer=0.12
   - sunpy=5.1
   - alembic=1.13
+  - psycopg2=2.9
 platforms:
   - linux-64
