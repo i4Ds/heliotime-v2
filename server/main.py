@@ -40,6 +40,7 @@ app.add_middleware(
 async def get_flux(start: datetime, end: datetime, resolution: int):
     # TODO: check start < end
     # TODO: configure max resolution
+    # TODO: investigate time inaccuracy (live data is not minute aligned)
     async with db_pool.acquire() as connection:
         series = await fetch_flux(connection, start, end, min(resolution, 2000))
         return [

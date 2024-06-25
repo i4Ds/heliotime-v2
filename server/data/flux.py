@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import numpy as np
@@ -25,21 +25,28 @@ _ALL_VIEWS = (
     _12H_VIEW,
     _5D_VIEW,
 )
+_VIEW_SIZES = {
+    _10S_VIEW: timedelta(seconds=10),
+    _1M_VIEW: timedelta(minutes=1),
+    _10M_VIEW: timedelta(minutes=10),
+    _1H_VIEW: timedelta(hours=1),
+    _12H_VIEW: timedelta(hours=12),
+    _5D_VIEW: timedelta(days=5),
+}
+_AUTO_REFRESH_HORIZONS = {
+    _10S_VIEW: timedelta(days=7),
+    _1M_VIEW: timedelta(days=7),
+    _10M_VIEW: timedelta(days=7),
+    _1H_VIEW: timedelta(days=7),
+    _12H_VIEW: timedelta(days=7),
+    _5D_VIEW: timedelta(days=30),
+}
 
 
 def _select_source(interval: timedelta) -> str:
-    if interval > timedelta(days=5):
-        return _5D_VIEW
-    if interval > timedelta(hours=12):
-        return _12H_VIEW
-    if interval > timedelta(hours=1):
-        return _1H_VIEW
-    if interval > timedelta(minutes=10):
-        return _10M_VIEW
-    if interval > timedelta(minutes=1):
-        return _1M_VIEW
-    if interval > timedelta(seconds=10):
-        return _10S_VIEW
+    for view in reversed(_ALL_VIEWS):
+        if interval > _VIEW_SIZES[view]:
+            return view
     return _RAW_TABLE
 
 
@@ -69,15 +76,21 @@ async def fetch_flux(connection: Connection, start: datetime, end: datetime, res
 
 
 async def import_flux(connection: Connection, flux: Flux):
+    if len(flux) == 0:
+        return
     await connection.copy_records_to_table(
         _RAW_TABLE, records=flux.items()
     )
     start = flux.index[0].to_pydatetime()
     end = flux.index[-1].to_pydatetime()
     for view in _ALL_VIEWS:
+        if _AUTO_REFRESH_HORIZONS[view] + datetime.now(timezone.utc) < start:
+            continue
+        view_size = _VIEW_SIZES[view]
         await connection.execute(
             f"CALL refresh_continuous_aggregate('{view}', $1::TIMESTAMPTZ, $2::TIMESTAMPTZ)",
-            start, end
+            # Extend update range to include the buckets at the edge
+            start - view_size, end + view_size
         )
 
 
