@@ -38,6 +38,7 @@ def _create_downscale(
                MAX(flux)
         FROM {parent_name}
         GROUP BY bucket
+        ORDER BY bucket
         WITH NO DATA;
         SELECT add_continuous_aggregate_policy('{view_name}',
           start_offset => INTERVAL '{start_offset}',

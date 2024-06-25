@@ -7,10 +7,11 @@ export async function fetchFluxSeries(
   signal?: AbortSignal
 ): Promise<FluxSeries> {
   const params = new URLSearchParams({
-    from: from.toString(),
-    to: to.toString(),
-    points: resolution.toString(),
+    start: new Date(from).toISOString(),
+    end: new Date(to).toISOString(),
+    resolution: resolution.toString(),
   });
-  const response = await fetch(`https://heliotime.org/api/?${params}`, { signal });
+  // TODO: make endpoint configurable
+  const response = await fetch(`http://localhost:8000/flux?${params}`, { signal });
   return response.json();
 }
