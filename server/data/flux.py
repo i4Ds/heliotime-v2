@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Optional
 
 import numpy as np
@@ -10,51 +11,90 @@ Flux = pd.Series
 FLUX_INDEX_NAME = 'time'
 FLUX_VALUE_NAME = 'flux'
 
-_RAW_TABLE = 'flux'
-_10S_VIEW = 'flux_10s'
-_1M_VIEW = 'flux_1m'
-_10M_VIEW = 'flux_10m'
-_1H_VIEW = 'flux_1h'
-_12H_VIEW = 'flux_12h'
-_5D_VIEW = 'flux_5d'
-_ALL_VIEWS = (
-    _10S_VIEW,
-    _1M_VIEW,
-    _10M_VIEW,
-    _1H_VIEW,
-    _12H_VIEW,
-    _5D_VIEW,
-)
-_VIEW_SIZES = {
-    _10S_VIEW: timedelta(seconds=10),
-    _1M_VIEW: timedelta(minutes=1),
-    _10M_VIEW: timedelta(minutes=10),
-    _1H_VIEW: timedelta(hours=1),
-    _12H_VIEW: timedelta(hours=12),
-    _5D_VIEW: timedelta(days=5),
-}
-_AUTO_REFRESH_HORIZONS = {
-    _10S_VIEW: timedelta(days=7),
-    _1M_VIEW: timedelta(days=7),
-    _10M_VIEW: timedelta(days=7),
-    _1H_VIEW: timedelta(days=7),
-    _12H_VIEW: timedelta(days=7),
-    _5D_VIEW: timedelta(days=30),
-}
-
-
-def _select_source(interval: timedelta) -> str:
-    for view in reversed(_ALL_VIEWS):
-        if interval > _VIEW_SIZES[view]:
-            return view
-    return _RAW_TABLE
-
 
 def empty_flux() -> Flux:
+    """
+    Creates an empty flux dataframe with correct form.
+    """
     return pd.Series(
         name=FLUX_VALUE_NAME,
-        index=pd.Series(dtype=np.int64, name=FLUX_INDEX_NAME)
+        dtype=np.float64,
+        index=pd.DatetimeIndex((), name=FLUX_INDEX_NAME),
     )
+
+
+# Amount of time subtracted form the auto refresh horizon to account for timing inaccuracies
+_AUTO_REFRESH_SLACK = timedelta(minutes=2)
+
+
+class _Resolution(Enum):
+    # Add R_ prefix because identifiers cannot start with a number
+    R_10S = '10s', timedelta(seconds=10)
+    R_1M = '1m', timedelta(minutes=1)
+    R_10M = '10m', timedelta(minutes=10)
+    R_1H = '1h', timedelta(hours=1)
+    R_12H = '12h', timedelta(hours=12)
+    R_5D = '5d', timedelta(days=5)
+
+    suffix: str
+    size: timedelta
+
+    def __init__(self, name: str, size: timedelta):
+        self.suffix = '_' + name
+        self.size = size
+
+
+_ALL_RESOLUTIONS = (
+    _Resolution.R_10S,
+    _Resolution.R_1M,
+    _Resolution.R_10M,
+    _Resolution.R_1H,
+    _Resolution.R_12H,
+    _Resolution.R_5D,
+)
+
+
+class FluxSource(Enum):
+    ARCHIVE = (
+        'flux_archive',
+        {res: timedelta() for res in _ALL_RESOLUTIONS}
+    )
+    LIVE = (
+        'flux_live',
+        {
+            _Resolution.R_10M: timedelta(days=8),
+            _Resolution.R_1H: timedelta(days=8),
+            _Resolution.R_12H: timedelta(days=8),
+            _Resolution.R_5D: timedelta(days=15),
+        }
+    )
+
+    table_name: str
+    resolutions: tuple[_Resolution, ...]
+    auto_refresh_horizons: dict[_Resolution, timedelta]
+
+    def __init__(
+            self,
+            table_name: str,
+            auto_refresh_horizons: dict[_Resolution, timedelta]
+    ):
+        """
+        :param auto_refresh_horizons: How far back the resolutions get auto-refreshed.
+             Must be ordered form smallest to biggest resolution.
+        """
+        self.table_name = table_name
+        self.auto_refresh_horizons = auto_refresh_horizons
+
+
+_MERGED_SOURCE = 'flux'
+_MERGED_RESOLUTIONS = _ALL_RESOLUTIONS
+
+
+def _select_merged_source(interval: timedelta) -> str:
+    for resolution in reversed(_MERGED_RESOLUTIONS):
+        if interval > resolution.size:
+            return _MERGED_SOURCE + resolution.suffix
+    return _MERGED_SOURCE
 
 
 async def fetch_flux(connection: Connection, start: datetime, end: datetime, resolution: int) -> Flux:
@@ -62,7 +102,7 @@ async def fetch_flux(connection: Connection, start: datetime, end: datetime, res
     records = await connection.fetch(
         f'''
             SELECT time_bucket($1, time) AS bucket, MAX(flux)
-            FROM {_select_source(interval)}
+            FROM {_select_merged_source(interval)}
             WHERE $2 <= time AND time < $3
             GROUP BY bucket
             ORDER BY bucket
@@ -75,24 +115,31 @@ async def fetch_flux(connection: Connection, start: datetime, end: datetime, res
     ).set_index(FLUX_INDEX_NAME)[FLUX_VALUE_NAME]
 
 
-async def import_flux(connection: Connection, flux: Flux):
+async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
     if len(flux) == 0:
         return
     await connection.copy_records_to_table(
-        _RAW_TABLE, records=flux.items()
+        source.table_name, records=flux.items()
     )
-    start = flux.index[0].to_pydatetime()
-    end = flux.index[-1].to_pydatetime()
-    for view in _ALL_VIEWS:
-        if _AUTO_REFRESH_HORIZONS[view] + datetime.now(timezone.utc) < start:
+
+    now = datetime.now(timezone.utc)
+    start = flux.index[0]
+    end = flux.index[-1]
+    for resolution, auto_refresh_horizon in source.auto_refresh_horizons.items():
+        if now - auto_refresh_horizon + _AUTO_REFRESH_SLACK < start:
+            # Skip manual refresh because it will be soon automatically refreshed
             continue
-        view_size = _VIEW_SIZES[view]
         await connection.execute(
-            f"CALL refresh_continuous_aggregate('{view}', $1::TIMESTAMPTZ, $2::TIMESTAMPTZ)",
+            f"""
+                CALL refresh_continuous_aggregate(
+                    '{source.table_name}{resolution.suffix}', 
+                    $1::TIMESTAMPTZ, $2::TIMESTAMPTZ
+                )
+            """,
             # Extend update range to include the buckets at the edge
-            start - view_size, end + view_size
+            start - resolution.size, end + resolution.size
         )
 
 
-async def fetch_last_flux_timestamp(connection: Connection) -> Optional[datetime]:
-    return await connection.fetchval('SELECT MAX(time) FROM flux')
+async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource) -> Optional[datetime]:
+    return await connection.fetchval(f'SELECT MAX(time) FROM {source.table_name}')

@@ -9,7 +9,8 @@ from pandas import Timestamp
 
 from data.db import create_db_pool
 from data.flux import fetch_flux
-from data.importer import ImporterProcess
+from importer.archive import ArchiveImporterProcess
+from importer.live import LiveImporterProcess
 
 db_pool: asyncpg.Pool
 
@@ -17,11 +18,14 @@ db_pool: asyncpg.Pool
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global db_pool
-    importer = ImporterProcess()
-    importer.start()
+    archive_importer = ArchiveImporterProcess()
+    archive_importer.start()
+    live_importer = LiveImporterProcess()
+    live_importer.start()
     db_pool = await create_db_pool()
     yield
-    importer.kill()
+    archive_importer.kill()
+    live_importer.kill()
     await db_pool.close()
 
 
