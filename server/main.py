@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import cast
+from typing import cast, Optional
 
 import asyncpg
 from fastapi import FastAPI
@@ -41,12 +41,16 @@ app.add_middleware(
 
 
 @app.get('/flux')
-async def get_flux(start: datetime, end: datetime, resolution: int):
+async def get_flux(
+        resolution: int,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None
+):
     # TODO: check start < end
     # TODO: configure max resolution
     # TODO: investigate time inaccuracy (live data is not minute aligned)
     async with db_pool.acquire() as connection:
-        series = await fetch_flux(connection, start, end, min(resolution, 2000))
+        series = await fetch_flux(connection, min(max(resolution, 1), 2000), start, end)
         return [
             (cast(Timestamp, timestamp).timestamp() * 1000, flux)
             for timestamp, flux in series.items()

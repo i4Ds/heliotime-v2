@@ -97,7 +97,20 @@ def _select_merged_source(interval: timedelta) -> str:
     return _MERGED_SOURCE
 
 
-async def fetch_flux(connection: Connection, start: datetime, end: datetime, resolution: int) -> Flux:
+async def fetch_flux(
+        connection: Connection,
+        resolution: int,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None
+) -> Flux:
+    if start is None:
+        start = await fetch_first_flux_timestamp(connection)
+        if start is None:
+            # If there is no first timestamp there isn't any data at all.
+            return empty_flux()
+    if end is None:
+        end = datetime.now(timezone.utc)
+
     interval = (end - start) / resolution
     records = await connection.fetch(
         f'''
@@ -139,6 +152,10 @@ async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
             # Extend update range to include the buckets at the edge
             start - resolution.size, end + resolution.size
         )
+
+
+async def fetch_first_flux_timestamp(connection: Connection) -> Optional[datetime]:
+    return await connection.fetchval('SELECT MIN(time) FROM flux')
 
 
 async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource) -> Optional[datetime]:
