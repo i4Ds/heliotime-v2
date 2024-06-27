@@ -12,3 +12,27 @@ services:
     environment:
       - POSTGRES_USER=${DATABASE_USERNAME:-postgres}
       - POSTGRES_DB=${DATABASE_DATABASE:-postgres}
+  server:
+    build:
+      context: ./server
+    ports:
+      - ${API_PORT:-8000}:8000
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    environment:
+      - DATABASE_HOST=${DATABASE_HOST:-db}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_DATABASE=${DATABASE_DATABASE:-postgres}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-postgres}
+      - IMPORT_START=${IMPORT_START:-}
+  site:
+    build:
+      context: ./site
+    ports:
+      - ${SITE_PORT:-3000}:3000
+    depends_on:
+      - server
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}

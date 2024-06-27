@@ -1,0 +1,4 @@
+# Ignore big unneeded folders to avoid big build context transfers.
+# Is required because podman currently does not support buildkit.
+.next/
+node_modules/

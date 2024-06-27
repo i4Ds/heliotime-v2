@@ -11,7 +11,6 @@ export async function fetchFluxSeries(
     end: new Date(to).toISOString(),
     resolution: resolution.toString(),
   });
-  // TODO: make endpoint configurable
-  const response = await fetch(`http://localhost:8000/flux?${params}`, { signal });
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/flux?${params}`, { signal });
   return response.json();
 }

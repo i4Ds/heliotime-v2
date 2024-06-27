@@ -1,0 +1,8 @@
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Database password not specified}
+  server:
+    restart: unless-stopped
+    environment:
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:?Database password not specified}

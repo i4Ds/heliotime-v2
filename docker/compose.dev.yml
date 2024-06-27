@@ -2,3 +2,6 @@ services:
   db:
     environment:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-heliotime}
+  server:
+    environment:
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-heliotime}

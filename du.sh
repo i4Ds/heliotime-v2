@@ -50,6 +50,8 @@ elif [ "$2" == "db:stop" ]; then
   compose stop db
 elif [ "$2" == "db:reset" ]; then
   compose rm --stop --volumes db
+elif [ "$2" == "deploy" ]; then
+  compose up --detach --build
 else
   compose "${@:2}"
 fi
