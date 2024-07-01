@@ -13,6 +13,8 @@ COPY next.config.mjs .
 COPY postcss.config.mjs .
 COPY tailwind.config.ts .
 COPY tsconfig.json .
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL $NEXT_PUBLIC_API_URL
 RUN --mount=type=cache,target=/usr/local/share/.cache yarn build
 
 FROM gcr.io/distroless/nodejs22-debian12:latest

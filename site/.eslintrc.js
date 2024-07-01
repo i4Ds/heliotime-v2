@@ -4,7 +4,7 @@ const { rules: baseES6Rules } = require('eslint-config-airbnb-base/rules/es6');
 /** @type {import('eslint').Linter.Config} */
 module.exports = {
   root: true,
-  plugins: ['@typescript-eslint', 'import', 'unicorn', 'react'],
+  plugins: ['@typescript-eslint', 'import', 'unicorn', 'react', '@tanstack/query'],
   extends: [
     'airbnb',
     'airbnb/hooks',
@@ -13,6 +13,7 @@ module.exports = {
     'plugin:import/typescript',
     'plugin:unicorn/recommended',
     'next/core-web-vitals',
+    'plugin:@tanstack/eslint-plugin-query/recommended',
     'prettier',
   ],
   parser: '@typescript-eslint/parser',

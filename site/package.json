@@ -10,6 +10,20 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@react-spring/web": "^9.7.3",
+    "@tanstack/react-query": "^5.48.0",
+    "@visx/axis": "^3.10.1",
+    "@visx/brush": "^3.10.4",
+    "@visx/event": "^3.3.0",
+    "@visx/grid": "^3.5.0",
+    "@visx/group": "^3.3.0",
+    "@visx/responsive": "^3.10.2",
+    "@visx/scale": "^3.5.0",
+    "@visx/shape": "^3.5.0",
+    "@visx/tooltip": "^3.3.0",
+    "@visx/xychart": "^3.11.0",
+    "d3-array": "^3.2.4",
+    "d3-interpolate": "^3.0.1",
     "highcharts": "^11.4.3",
     "highcharts-react-official": "^3.2.1",
     "next": "14.2.4",
@@ -18,6 +32,7 @@
     "sharp": "^0.33.4"
   },
   "devDependencies": {
+    "@tanstack/eslint-plugin-query": "^5.47.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

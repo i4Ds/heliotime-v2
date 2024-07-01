@@ -24,25 +24,27 @@ export interface HelioViewProps {
 export default function HelioView({ timestamp }: HelioViewProps) {
   const viewerUrl = useMemo(() => getHelioviewerUrl(timestamp), [timestamp]);
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex justify-center items-center gap-2">
+      <div className="flex flex-col gap-2">
+        <div>{formatDate(timestamp)}</div>
+        <a
+          className="px-4 py-2 rounded-md bg-blue-300"
+          href={viewerUrl}
+          target="_blank"
+          rel="noopener"
+        >
+          {viewActionText}
+        </a>
+      </div>
       <a href={viewerUrl} target="_blank" rel="noopener" title={viewActionText}>
         <Image
-          className="max-w-96 rounded-lg"
+          className="max-w-32 rounded-lg"
           src={getSolarImageUrl(timestamp)}
           alt={`The sun at ${timestamp}`}
           width={500}
           height={500}
           priority
         />
-      </a>
-      <div>{formatDate(timestamp)}</div>
-      <a
-        className="px-4 py-2 rounded-md bg-blue-300"
-        href={viewerUrl}
-        target="_blank"
-        rel="noopener"
-      >
-        {viewActionText}
       </a>
     </div>
   );

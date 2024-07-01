@@ -1,13 +1,12 @@
 const layers = '[SDO,AIA,AIA,171,1,100]';
 
-export function getSolarImageUrl(timestamp: Date): string {
+export function getSolarImageUrl(timestamp: Date, resolution = 256): string {
   const params = new URLSearchParams({
     date: timestamp.toISOString(),
     layers,
-    // TODO: make size dynamic
-    imageScale: '5',
-    width: '500',
-    height: '500',
+    imageScale: (2500 / resolution).toString(),
+    width: resolution.toString(),
+    height: resolution.toString(),
     x0: '0',
     y0: '0',
     display: 'true',

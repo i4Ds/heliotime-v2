@@ -49,9 +49,9 @@ class SeriesLoader {
     this.lastAborter = aborter;
 
     this.lastData = fetchFluxSeries(
+      this.chart.plotWidth,
       Math.floor(min),
       Math.ceil(max),
-      this.chart.plotWidth,
       aborter.signal
     );
     try {
@@ -79,7 +79,7 @@ export interface FlexChartProps {
   onTimeSelect?: (timestamp: Date) => void;
 }
 
-export function FluxChart({ onTimeSelect }: FlexChartProps) {
+export default function FluxChart({ onTimeSelect }: FlexChartProps) {
   const [options, setOptions] = useState<Highcharts.Options | undefined>();
   useEffect(() => {
     let firstLoad = true;
@@ -104,10 +104,10 @@ export function FluxChart({ onTimeSelect }: FlexChartProps) {
           resetButton: {
             theme: {
               style: {
-                display:'none'
-              }
-            }
-          }
+                display: 'none',
+              },
+            },
+          },
         },
         events: {
           async load() {
