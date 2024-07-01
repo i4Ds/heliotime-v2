@@ -30,9 +30,9 @@ services:
   site:
     build:
       context: ./site
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - ${SITE_PORT:-3000}:3000
     depends_on:
       - server
-    environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
