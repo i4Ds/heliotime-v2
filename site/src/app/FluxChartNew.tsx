@@ -5,8 +5,9 @@ import { Brush } from '@visx/brush';
 import BaseBrush from '@visx/brush/lib/BaseBrush';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
-import { NumberLike, scaleLog, scaleTime } from '@visx/scale';
+import { AnyD3Scale, NumberLike, ScaleInput, scaleLog, scaleTime } from '@visx/scale';
 import { Circle, Line, LinePath } from '@visx/shape';
+import { Text, TextProps } from '@visx/text';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector, extent } from 'd3-array';
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
@@ -129,7 +130,7 @@ const FluxBrush = forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
         recordBrush.current = false;
       }}
     >
-      <GridColumns scale={timeScale} height={height} numTicks={8} />
+      <GridColumns scale={timeScale} height={height} numTicks={8} stroke="#0002" />
       <LinePath
         data={navData}
         x={(d) => timeScale(d[0])}
@@ -158,6 +159,119 @@ const FluxBrush = forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
     </svg>
   );
 });
+
+interface HorizontalBandProps<Scale extends AnyD3Scale>
+  extends Omit<React.SVGProps<SVGRectElement>, 'scale' | 'x' | 'y' | 'width' | 'height'> {
+  scale: Scale;
+  from: ScaleInput<Scale>;
+  to: ScaleInput<Scale>;
+  x?: number;
+  y?: number;
+  width: number;
+  height: number;
+  label?: string;
+  labelOffset?: number;
+  showLabelRelativeThreshold?: number;
+  showLabelAbsoluteThreshold?: number;
+  labelProps?: Omit<TextProps, 'x' | 'y' | 'verticalAnchor'>;
+}
+
+function HorizontalBand<Scale extends AnyD3Scale>({
+  scale,
+  from,
+  to,
+  x = 0,
+  y = 0,
+  width,
+  height,
+  label,
+  labelOffset = 5,
+  labelProps = {},
+  showLabelRelativeThreshold = 0.5,
+  showLabelAbsoluteThreshold = height * 0.3,
+  ...rectProps
+}: HorizontalBandProps<Scale>) {
+  const y0 = scale(from);
+  const y1 = scale(to);
+  if (height < y0 || y1 < 0) return undefined;
+  const clippedY0 = Math.max(0, y0);
+  const clippedY1 = Math.min(height, y1);
+  const clippedHeight = clippedY1 - clippedY0;
+  const trueHeight = y1 - y0;
+  const showLabel =
+    clippedHeight / trueHeight > showLabelRelativeThreshold ||
+    clippedHeight > showLabelAbsoluteThreshold;
+  return (
+    <svg x={x} y={clippedY0 + y} width={width} height={clippedHeight} className="overflow-visible">
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={clippedHeight}
+        // eslint-disable-next-line react/jsx-props-no-spreading
+        {...rectProps}
+      />
+      {showLabel && (
+        <Text
+          x={labelOffset}
+          y={clippedHeight / 2}
+          verticalAnchor="middle"
+          // eslint-disable-next-line react/jsx-props-no-spreading
+          {...labelProps}
+        >
+          {label}
+        </Text>
+      )}
+    </svg>
+  );
+}
+
+const SUPERSCRIPTS: Record<string, string> = {
+  ' ': ' ',
+  '0': '⁰',
+  '1': '¹',
+  '2': '²',
+  '3': '³',
+  '4': '⁴',
+  '5': '⁵',
+  '6': '⁶',
+  '7': '⁷',
+  '8': '⁸',
+  '9': '⁹',
+  '+': '⁺',
+  '-': '⁻',
+  a: 'ᵃ',
+  b: 'ᵇ',
+  c: 'ᶜ',
+  d: 'ᵈ',
+  e: 'ᵉ',
+  f: 'ᶠ',
+  g: 'ᵍ',
+  h: 'ʰ',
+  i: 'ⁱ',
+  j: 'ʲ',
+  k: 'ᵏ',
+  l: 'ˡ',
+  m: 'ᵐ',
+  n: 'ⁿ',
+  o: 'ᵒ',
+  p: 'ᵖ',
+  r: 'ʳ',
+  s: 'ˢ',
+  t: 'ᵗ',
+  u: 'ᵘ',
+  v: 'ᵛ',
+  w: 'ʷ',
+  x: 'ˣ',
+  y: 'ʸ',
+  z: 'ᶻ',
+};
+
+function toSuperScript(text: string): string {
+  return Array.from(text)
+    .map((c) => SUPERSCRIPTS[c] ?? '')
+    .join('');
+}
 
 interface FluxMainProps extends BasicProps {
   view?: [number, number];
@@ -269,8 +383,23 @@ function FluxMain({
       onWheel={handleZoom}
       className="overflow-visible"
     >
+      {/* Invisible rect to catch interaction events. */}
       <rect width={width} height={height} fill="transparent" />
-      <GridColumns scale={timeScale} height={height} numTicks={8} />
+      {[0, 1, 2, 3, 4].map((index) => (
+        <HorizontalBand
+          key={index}
+          scale={wattScale}
+          from={10 ** (-7 + index)}
+          to={10 ** (-8 + index)}
+          width={width}
+          height={height}
+          fill={index % 2 ? '#e6e9ff' : '#d1d7ff'}
+          label={'ABCMX'[index]}
+          labelOffset={-20}
+          labelProps={{ textAnchor: 'end' }}
+        />
+      ))}
+      <GridColumns scale={timeScale} height={height} numTicks={8} stroke="#0002" />
       <LinePath
         data={data}
         x={(d) => timeScale(d[0])}
@@ -278,7 +407,18 @@ function FluxMain({
         stroke={LINE_COLOR}
       />
       <AxisBottom top={height} scale={timeScale} tickFormat={formatTime} numTicks={8} />
-      <AxisLeft scale={wattScale} />
+      <AxisLeft
+        scale={wattScale}
+        label="X-ray Flux ( W/m² )"
+        labelProps={{ fontSize: 13 }}
+        labelOffset={40}
+        tickLabelProps={{ fontSize: 13 }}
+        tickFormat={(v) => {
+          const exponent = Math.log10(v.valueOf());
+          if (exponent % 1 !== 0) return undefined;
+          return `10${toSuperScript(exponent.toString())}`;
+        }}
+      />
       {tooltipData && (
         <>
           <Circle cx={tooltipLeft} cy={wattScale(tooltipData)} r={3} />
@@ -300,7 +440,7 @@ export interface FluxChartProps {
 
 export default function FluxChartNew({ width, height, onTimeSelect }: FluxChartProps) {
   const brushHeight = height * 0.15;
-  const marginLeft = 50;
+  const marginLeft = 70;
 
   const brushRef = useRef<FluxBrushRef>(null);
   const [view, setView] = useState<[number, number] | undefined>();
