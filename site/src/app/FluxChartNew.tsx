@@ -1,11 +1,11 @@
-import { FluxMeasurement, FluxSeries, fluxQuery } from '@/api/flux';
+import { FluxMeasurement, FluxSeries, useFluxQuery } from '@/api/flux';
 import { useQuery } from '@tanstack/react-query';
 import { AxisBottom, AxisLeft, AxisTop } from '@visx/axis';
 import { Brush } from '@visx/brush';
 import BaseBrush from '@visx/brush/lib/BaseBrush';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
-import { scaleLog, scaleTime } from '@visx/scale';
+import { NumberLike, scaleLog, scaleTime } from '@visx/scale';
 import { Circle, Line, LinePath } from '@visx/shape';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector, extent } from 'd3-array';
@@ -23,6 +23,25 @@ function timeExtent(navData: FluxSeries | undefined): Range | undefined {
 function wattExtent(data: FluxSeries | undefined): Range | undefined {
   const minMax = extent(data ?? [], (r) => r[1]);
   return minMax[0] === undefined ? undefined : minMax;
+}
+
+function padZeros(value: number, digits = 2): string {
+  return value.toFixed(0).padStart(digits, '0');
+}
+
+function formatTime(value: Date | NumberLike): string | undefined {
+  if (!(value instanceof Date)) return undefined;
+  if (value.getTime() === new Date(value).setHours(0, 0, 0, 0)) {
+    let text = padZeros(value.getFullYear(), 4);
+    if (value.getMonth() !== 0 || value.getDate() !== 1)
+      text += `-${padZeros(value.getMonth() + 1)}`;
+    if (value.getDate() !== 1) text += `-${padZeros(value.getDate())}`;
+    return text;
+  }
+  let text = `${padZeros(value.getHours())}:${padZeros(value.getMinutes())}`;
+  if (value.getSeconds() !== 0) text += `:${padZeros(value.getSeconds())}`;
+  if (value.getMilliseconds() !== 0) text += `:${padZeros(value.getMilliseconds(), 3)}`;
+  return text;
 }
 
 interface BasicProps {
@@ -45,7 +64,7 @@ const FluxBrush = forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
   { width, height, top, left, onBrush },
   ref
 ) {
-  const { data: navData } = useQuery(fluxQuery(width));
+  const { data: navData } = useQuery(useFluxQuery(width));
 
   const timeScale = useMemo(
     () =>
@@ -59,7 +78,8 @@ const FluxBrush = forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
   const wattScale = useMemo(
     () =>
       scaleLog({
-        range: [height - 25, 0],
+        // Don't go all the way down to prevent overlap with label
+        range: [height - 15, 0],
         domain: wattExtent(navData),
       }),
     [height, navData]
@@ -109,14 +129,21 @@ const FluxBrush = forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
         recordBrush.current = false;
       }}
     >
-      <GridColumns scale={timeScale} height={height} />
+      <GridColumns scale={timeScale} height={height} numTicks={8} />
       <LinePath
         data={navData}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}
         stroke={LINE_COLOR}
       />
-      <AxisTop top={height} scale={timeScale} />
+      <AxisTop
+        top={height}
+        scale={timeScale}
+        tickFormat={formatTime}
+        numTicks={8}
+        hideTicks
+        tickLength={-3}
+      />
       <Brush
         innerRef={brushRef}
         xScale={timeScale}
@@ -148,7 +175,7 @@ function FluxMain({
   setView,
   onTimeSelect,
 }: FluxMainProps) {
-  const { data } = useQuery(fluxQuery(width, view?.[0], view?.[1]));
+  const { data } = useQuery(useFluxQuery(width, view?.[0], view?.[1]));
 
   const timeScale = useMemo(
     () =>
@@ -243,9 +270,14 @@ function FluxMain({
       className="overflow-visible"
     >
       <rect width={width} height={height} fill="transparent" />
-      <GridColumns scale={timeScale} height={height} />
-      <LinePath data={data} x={(d) => timeScale(d[0])} y={(d) => wattScale(d[1])} stroke={LINE_COLOR} />
-      <AxisBottom top={height} scale={timeScale} />
+      <GridColumns scale={timeScale} height={height} numTicks={8} />
+      <LinePath
+        data={data}
+        x={(d) => timeScale(d[0])}
+        y={(d) => wattScale(d[1])}
+        stroke={LINE_COLOR}
+      />
+      <AxisBottom top={height} scale={timeScale} tickFormat={formatTime} numTicks={8} />
       <AxisLeft scale={wattScale} />
       {tooltipData && (
         <>
@@ -267,7 +299,7 @@ export interface FluxChartProps {
 }
 
 export default function FluxChartNew({ width, height, onTimeSelect }: FluxChartProps) {
-  const brushHeight = height * 0.2;
+  const brushHeight = height * 0.15;
   const marginLeft = 50;
 
   const brushRef = useRef<FluxBrushRef>(null);
