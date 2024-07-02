@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 
 export type FluxMeasurement = [timestamp: number, watts: number];
 export type FluxSeries = FluxMeasurement[];
@@ -19,8 +20,6 @@ export async function fetchFluxSeries(
   return response.json();
 }
 
-let lastFetch: FluxSeries | undefined;
-
 function select(series: FluxSeries, start?: number, end?: number): FluxSeries {
   const firstInclusive = series.findIndex(
     ([timestamp]) => start === undefined || start < timestamp
@@ -29,17 +28,32 @@ function select(series: FluxSeries, start?: number, end?: number): FluxSeries {
   return series.slice(firstInclusive, lastInclusive + 1);
 }
 
-export function fluxQuery(resolution: number, from?: number, to?: number) {
+let lastFetch: FluxSeries = [];
+
+export function useFluxQuery(resolution: number, from?: number, to?: number) {
+  const mountTime = useMemo(() => Date.now(), []);
+  const isComplete = useCallback(
+    (series: FluxSeries) => {
+      if (series.length === 0) return false;
+      const last = series.at(-1)![0];
+      const first = series[0][0];
+      const realTo = to ?? mountTime;
+      const interval = (realTo - (from ?? first)) / resolution;
+      return realTo < last + interval;
+    },
+    [from, mountTime, resolution, to]
+  );
+  const placeholderData = useMemo(() => select(lastFetch, from, to), [from, to]);
   return queryOptions({
     queryKey: ['flux', from, to, resolution],
-    queryFn: async () => {
-      const series = await fetchFluxSeries(resolution, from, to);
+    queryFn: async ({ signal }) => {
+      const series = await fetchFluxSeries(resolution, from, to, signal);
       lastFetch = series;
       return series;
     },
-    // TODO: use better initial data strategy
-    initialData: () => (lastFetch === undefined ? [] : select(lastFetch, from, to)),
-    // Immediately fetch actual data
-    initialDataUpdatedAt: 0,
+    staleTime: ({ state }) => (isComplete(state.data ?? []) ? Number.POSITIVE_INFINITY : 0),
+    // Live data source updates every minute
+    refetchInterval: ({ state }) => (isComplete(state.data ?? []) ? false : 60 * 1000),
+    placeholderData,
   });
 }
