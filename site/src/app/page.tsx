@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { ParentSize } from '@visx/responsive';
 // import FluxChart from './FluxChart';
+import FluxChartNew from '@/chart/FluxChart';
 import HelioView from './HelioView';
-import FluxChartNew from './FluxChartNew';
 
 export default function Home() {
   const [timestamp, setTimestamp] = useState<Date | undefined>();
