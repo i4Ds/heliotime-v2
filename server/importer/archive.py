@@ -45,8 +45,12 @@ def _select_best_source(day_result: QueryResponse) -> QueryResponseRow:
     return high_res[0] if len(high_res) >= 1 else day_result[0]
 
 
+def _month_start(date: datetime) -> datetime:
+    return date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
 def _next_month_start(date: datetime) -> datetime:
-    return (date.replace(day=1) + timedelta(days=32)).replace(day=1)
+    return _month_start(date.replace(day=1) + timedelta(days=32))
 
 
 def _from_timeseries(timeseries: TimeSeries) -> Flux:
@@ -140,7 +144,7 @@ class ArchiveImporter(Importer):
                 start, search_semaphore
             ))
             for date in pd.date_range(
-                start, datetime.now(timezone.utc),
+                _month_start(start), datetime.now(timezone.utc),
                 freq='MS'
             )
         ]
