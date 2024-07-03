@@ -11,6 +11,7 @@ from data.db import create_db_pool, apply_db_migrations
 from data.flux import fetch_flux
 from importer.archive import ArchiveImporterProcess
 from importer.live import LiveImporterProcess
+from utils.logging import configure_logging
 
 db_pool: asyncpg.Pool
 
@@ -18,6 +19,7 @@ db_pool: asyncpg.Pool
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global db_pool
+    configure_logging()
     apply_db_migrations()
     archive_importer = ArchiveImporterProcess()
     archive_importer.start()
