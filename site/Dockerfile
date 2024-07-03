@@ -7,7 +7,6 @@ COPY package.json .
 COPY yarn.lock .
 RUN --mount=type=cache,target=/usr/local/share/.cache yarn install --frozen-lockfile --ignore-engines
 
-COPY public ./public
 COPY src ./src
 COPY next.config.mjs .
 COPY postcss.config.mjs .
