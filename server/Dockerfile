@@ -7,9 +7,11 @@ RUN micromamba install --yes --name base --file conda-lock.yml && \
 COPY data ./data
 COPY importer ./importer
 COPY migrations ./migrations
+COPY utils ./utils
 COPY alembic.ini ./
 COPY config.py ./
 COPY import.py ./
+COPY logging.ini ./
 COPY main.py ./
 
 ENV PYTHONUNBUFFERED=1
