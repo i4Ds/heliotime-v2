@@ -21,7 +21,6 @@ FROM gcr.io/distroless/nodejs22-debian12:latest
 ENV NEXT_TELEMETRY_DISABLED 1
 WORKDIR /app
 
-COPY public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
