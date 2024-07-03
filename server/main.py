@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pandas import Timestamp
 
-from data.db import create_db_pool
+from data.db import create_db_pool, apply_db_migrations
 from data.flux import fetch_flux
 from importer.archive import ArchiveImporterProcess
 from importer.live import LiveImporterProcess
@@ -18,15 +18,16 @@ db_pool: asyncpg.Pool
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global db_pool
+    apply_db_migrations()
     archive_importer = ArchiveImporterProcess()
     archive_importer.start()
     live_importer = LiveImporterProcess()
     live_importer.start()
     db_pool = await create_db_pool()
     yield
+    await db_pool.close()
     archive_importer.kill()
     live_importer.kill()
-    await db_pool.close()
 
 
 app = FastAPI(lifespan=lifespan)
