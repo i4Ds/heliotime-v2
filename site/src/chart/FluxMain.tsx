@@ -75,7 +75,8 @@ export function FluxMain({
     [onTimeSelect, timeScale]
   );
 
-  const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } = useTooltip<number>();
+  const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
+    useTooltip<FluxMeasurement>();
   const { containerRef, TooltipInPortal } = useTooltipInPortal();
   const handleTooltip = useCallback(
     (event: React.TouchEvent<SVGElement> | React.MouseEvent<SVGElement>) => {
@@ -90,7 +91,7 @@ export function FluxMain({
       );
       const measurement = data[index];
       showTooltip({
-        tooltipData: measurement[1],
+        tooltipData: measurement,
         tooltipLeft: timeScale(measurement[0]),
         tooltipTop: point.y,
       });
@@ -167,10 +168,11 @@ export function FluxMain({
       />
       {tooltipData && (
         <>
-          <Circle cx={tooltipLeft} cy={wattScale(tooltipData)} r={3} />
+          <Circle cx={tooltipLeft} cy={wattScale(tooltipData[1])} r={3} />
           <Line y2={height} x1={tooltipLeft} x2={tooltipLeft} stroke="black" />
-          <TooltipInPortal top={tooltipTop} left={tooltipLeft}>
-            {tooltipData}
+          <TooltipInPortal top={tooltipTop} left={tooltipLeft} className='text-center flex flex-col gap-1'>
+            <b>{new Date(tooltipData[0]).toISOString()}</b>
+            <div>{tooltipData[1].toExponential(5)} W/m²</div>
           </TooltipInPortal>
         </>
       )}
