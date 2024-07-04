@@ -1,10 +1,11 @@
 import asyncio
 import warnings
 from asyncio import Future, Semaphore
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta, datetime, timezone, time
 from pathlib import Path
-from typing import Callable, TypeVar, Any
+from typing import Callable, TypeVar, Any, Union
 
 import pandas as pd
 from asyncpg import Connection
@@ -64,7 +65,7 @@ _TReturn = TypeVar('_TReturn')
 
 
 class ArchiveImporter(Importer):
-    max_download_retries: int = 4
+    max_download_tries: int = 5
     download_backoff: timedelta = timedelta(seconds=30)
 
     _executor: ThreadPoolExecutor
@@ -103,29 +104,42 @@ class ArchiveImporter(Importer):
         ))
 
     async def _download_results(self, results: UnifiedResponse) -> Results:
-        for i_try in range(self.max_download_retries + 1):
+        for i_try in range(self.max_download_tries):
             files = await self._run_in_executor(
                 lambda: Fido.fetch(
                     results,
                     # Download everything at once (max days in a month).
                     max_conn=31,
-                    progress=False
+                    progress=False,
+                    # The files are deleted after import so leftover files
+                    # are probably corrupt from a previous crash.
+                    overwrite=True
                 )
             )
             if len(files.errors) == 0:
                 break
-            # Errors probably because of rate limits. Back off
-            await asyncio.sleep(
-                self.download_backoff.total_seconds() * (i_try + 1)
-            )
+            if i_try < self.max_download_tries - 1:
+                # Errors probably because of rate limits. Back off
+                wait = self.download_backoff * (i_try + 1)
+                self._logger.warning(
+                    f'Download of {len(files.errors)} files failed (of {len(results)}, try {i_try + 1}). '
+                    f'Retrying in {wait}',
+                    files.errors
+                )
+                await asyncio.sleep(wait.total_seconds())
+            else:
+                self._logger.error(
+                    f'Download of {len(files.errors)} files failed. '
+                    f'Giving up after {self.max_download_tries} tries'
+                )
         return files  # noqa
 
-    async def _load_files(self, files: Results) -> Flux:
+    async def _load_files(self, files: Union[Results, str]) -> Flux:
         return await self._run_in_executor(
             lambda: _from_timeseries(TimeSeries(files, concatenate=True))
         )
 
-    async def _delete_files(self, files):
+    async def _delete_files(self, files: Results):
         await asyncio.gather(*(
             self._run_in_executor(lambda p: Path(p).unlink(), path)
             for path in files
@@ -155,8 +169,24 @@ class ArchiveImporter(Importer):
             files = await self._download_results(results)
             if len(files) == 0:
                 continue
-            flux = await self._load_files(files)
-            await self._import(flux.loc[start:])
+            flux_dfs = deque()
+            try:
+                flux_dfs.append(await self._load_files(files))
+            except KeyboardInterrupt as e:
+                raise e
+            except:  # noqa
+                self._logger.warning(
+                    'Failed to load file batch into memory. Retrying each file individually',
+                    exc_info=True
+                )
+                for file in files:
+                    try:
+                        flux_dfs.append(await self._load_files(file))
+                    except KeyboardInterrupt as e:
+                        raise e
+                    except:  # noqa
+                        self._logger.exception(f'Failed to load {file} into memory. Skipping')
+            await self._import(pd.concat(flux_dfs).loc[start:])
             await self._delete_files(files)
         return timedelta(hours=1)
 

@@ -75,7 +75,7 @@ def _start_async(source: FluxSource, start: ImportStarter):
             asyncio.run(start())
         except KeyboardInterrupt as e:
             raise e
-        except BaseException as e:  # noqa
+        except:  # noqa
             logger.exception(f"Encountered unexpected exception. Restarting importer in {_RESTART_DELAY}.")
             time.sleep(_RESTART_DELAY.total_seconds())
 
