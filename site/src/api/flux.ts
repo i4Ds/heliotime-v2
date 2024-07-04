@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 export type FluxMeasurement = [timestamp: number, watts: number];
 export type FluxSeries = FluxMeasurement[];
@@ -20,7 +20,7 @@ export async function fetchFluxSeries(
   return response.json();
 }
 
-function select(series: FluxSeries, start?: number, end?: number): FluxSeries {
+export function selectFlux(series: FluxSeries, start?: number, end?: number): FluxSeries {
   const firstInclusive = series.findIndex(
     ([timestamp]) => start === undefined || start < timestamp
   );
@@ -28,9 +28,10 @@ function select(series: FluxSeries, start?: number, end?: number): FluxSeries {
   return series.slice(firstInclusive, lastInclusive + 1);
 }
 
-let lastFetch: FluxSeries = [];
-
-export function useFluxQuery(resolution: number, from?: number, to?: number) {
+/**
+ * @param ignoreAbort Don't abort if parameters change. Means the placeholder will still be fetched.
+ */
+export function useFluxQuery(resolution: number, from?: number, to?: number, ignoreAbort = false) {
   const mountTime = useMemo(() => Date.now(), []);
   const isComplete = useCallback(
     (series: FluxSeries) => {
@@ -43,17 +44,19 @@ export function useFluxQuery(resolution: number, from?: number, to?: number) {
     },
     [from, mountTime, resolution, to]
   );
-  const placeholderData = useMemo(() => select(lastFetch, from, to), [from, to]);
+  const [lastData, setLastData] = useState<FluxSeries>([]);
+  const placeholderData = useMemo(() => selectFlux(lastData, from, to), [from, lastData, to]);
   return queryOptions({
-    queryKey: ['flux', from, to, resolution],
+    queryKey: ['flux', from, to, resolution, ignoreAbort],
     queryFn: async ({ signal }) => {
-      const series = await fetchFluxSeries(resolution, from, to, signal);
-      lastFetch = series;
+      const series = await fetchFluxSeries(resolution, from, to, ignoreAbort ? undefined : signal);
+      setLastData(series);
       return series;
     },
-    staleTime: ({ state }) => (isComplete(state.data ?? []) ? Number.POSITIVE_INFINITY : 0),
-    // Live data source updates every minute
-    refetchInterval: ({ state }) => (isComplete(state.data ?? []) ? false : 60 * 1000),
+    // When data is complete only the archive data could slowly catch up so update slower.
+    // Else update every minute with the live data.
+    staleTime: ({ state }) => (isComplete(state.data ?? []) ? 60 : 10) * 1000,
+    refetchInterval: ({ state }) => (isComplete(state.data ?? []) ? 10 : 1) * 60 * 1000,
     placeholderData,
   });
 }
