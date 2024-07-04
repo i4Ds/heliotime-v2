@@ -70,7 +70,6 @@ class FluxSource(Enum):
     )
 
     table_name: str
-    resolutions: tuple[_Resolution, ...]
     auto_refresh_horizons: dict[_Resolution, timedelta]
 
     def __init__(
@@ -92,7 +91,7 @@ _MERGED_RESOLUTIONS = _ALL_RESOLUTIONS
 
 def _select_merged_source(interval: timedelta) -> str:
     for resolution in reversed(_MERGED_RESOLUTIONS):
-        if interval > resolution.size:
+        if interval >= resolution.size:
             return _MERGED_SOURCE + resolution.suffix
     return _MERGED_SOURCE
 
