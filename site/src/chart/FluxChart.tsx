@@ -16,7 +16,14 @@ export default function FluxChart({ width, height, onTimeSelect }: FluxChartProp
   const brushRef = useRef<FluxBrushRef>(null);
   const viewState = useState<View>();
   const [view, setView] = viewState;
-  useEffect(() => brushRef.current?.updateBrush(view), [view]);
+
+  // updateBrush flag is needed to prevent recursive updates from the brush
+  const updateBrush = useRef<boolean>(false);
+  useEffect(() => {
+    if (!updateBrush.current) return;
+    brushRef.current?.updateBrush(view);
+    updateBrush.current = false;
+  }, [view]);
 
   return (
     <svg width={width} height={height} className="overflow-visible">
@@ -25,12 +32,13 @@ export default function FluxChart({ width, height, onTimeSelect }: FluxChartProp
         height={height - brushHeight - 40}
         left={marginLeft}
         view={view}
-        setView={(setter) =>
+        setView={(setter) => {
+          updateBrush.current = true;
           setView((previous) =>
             // Cannot call updateBrush here because setters need to be pure
             brushRef.current?.clampView(setter(previous))
-          )
-        }
+          );
+        }}
         onTimeSelect={onTimeSelect}
       />
       <FluxBrush
