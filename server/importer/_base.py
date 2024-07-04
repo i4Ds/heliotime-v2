@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from abc import ABC, abstractmethod
 from datetime import timedelta, datetime
 from multiprocessing import Process
@@ -14,6 +15,10 @@ from utils.logging import configure_logging
 _logger = logging.getLogger(f'importer')
 
 
+def _source_logger(source: FluxSource) -> logging.Logger:
+    return _logger.getChild(source.name.lower())
+
+
 class Importer(ABC):
     source: FluxSource
 
@@ -22,7 +27,7 @@ class Importer(ABC):
 
     def __init__(self, source: FluxSource, connection: Connection):
         self.source = source
-        self._logger = _logger.getChild(source.name.lower())
+        self._logger = _source_logger(source)
         self._connection = connection
 
     async def _import(self, flux: Flux):
@@ -54,15 +59,25 @@ class Importer(ABC):
             await asyncio.sleep(wait_delta.total_seconds())
 
 
+_RESTART_DELAY = timedelta(minutes=1)
+
 ImportStarter = Callable[[], Coroutine[Any, Any, Any]]
 
 
-def _start_async(start: ImportStarter):
+def _start_async(source: FluxSource, start: ImportStarter):
     """
     Must be a module level function to be usable as process target.
     """
     configure_logging()
-    asyncio.run(start())
+    logger = _source_logger(source)
+    while True:
+        try:
+            asyncio.run(start())
+        except KeyboardInterrupt as e:
+            raise e
+        except BaseException as e:  # noqa
+            logger.exception(f"Encountered unexpected exception. Restarting importer in {_RESTART_DELAY}.")
+            time.sleep(_RESTART_DELAY.total_seconds())
 
 
 _PROCESS_NAMES = {
@@ -76,6 +91,6 @@ class ImporterProcess(Process, ABC):
         super().__init__(
             name=f'Heliotime {_PROCESS_NAMES[source]} Importer',
             target=_start_async,
-            args=(start,),
+            args=(source, start),
             daemon=True
         )
