@@ -3,7 +3,9 @@ services:
     image: timescale/timescaledb:2.15.2-pg16
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      # Do not use pg_isready because it throws errors
+      # See: https://github.com/peter-evans/docker-compose-healthcheck/issues/16#issuecomment-1402807860
+      test: ['CMD-SHELL', 'psql -h localhost -U $${POSTGRES_USER} -c select 1 -d $${POSTGRES_DB}']
       start_period: 10s
       interval: 10s
       retries: 10
