@@ -57,6 +57,7 @@ export function useFluxQuery(resolution: number, from?: number, to?: number, ign
     // Else update every minute with the live data.
     staleTime: ({ state }) => (isComplete(state.data ?? []) ? 60 : 10) * 1000,
     refetchInterval: ({ state }) => (isComplete(state.data ?? []) ? 10 : 1) * 60 * 1000,
+    gcTime: 10 * 1000,
     placeholderData,
   });
 }
