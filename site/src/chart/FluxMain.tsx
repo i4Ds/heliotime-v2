@@ -60,7 +60,8 @@ export function FluxMain({
     () =>
       scaleLog({
         range: [height, 0],
-        domain: wattExtent(data),
+        domain: wattExtent(data, 1.4),
+        clamp: true
       }),
     [data, height]
   );
@@ -170,7 +171,11 @@ export function FluxMain({
         <>
           <Circle cx={tooltipLeft} cy={wattScale(tooltipData[1])} r={3} />
           <Line y2={height} x1={tooltipLeft} x2={tooltipLeft} stroke="black" />
-          <TooltipInPortal top={tooltipTop} left={tooltipLeft} className='text-center flex flex-col gap-1'>
+          <TooltipInPortal
+            top={tooltipTop}
+            left={tooltipLeft}
+            className="text-center flex flex-col gap-1"
+          >
             <b>{new Date(tooltipData[0]).toISOString()}</b>
             <div>{tooltipData[1].toExponential(5)} W/m²</div>
           </TooltipInPortal>

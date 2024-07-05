@@ -7,7 +7,7 @@ import { createContext, useState } from 'react';
 // TODO: style properly
 export const LINE_COLOR = '#2582ec';
 
-export type View = Readonly<NumberRange> | undefined
+export type View = Readonly<NumberRange> | undefined;
 
 export const ViewContext = createContext<ReturnType<typeof useState<NumberRange | undefined>>>([
   undefined,
@@ -18,9 +18,10 @@ export function timeExtent(navData: FluxSeries | undefined): NumberRange | undef
   return (navData?.length ?? 0) === 0 ? undefined : [navData![0][0], Date.now()];
 }
 
-export function wattExtent(data: FluxSeries | undefined): NumberRange | undefined {
-  const minMax = extent(data ?? [], (r) => r[1]);
-  return minMax[0] === undefined ? undefined : minMax;
+export function wattExtent(data: FluxSeries | undefined, extend = 1): NumberRange | undefined {
+  const [min, max] = extent(data ?? [], (r) => r[1]);
+  // Clamp min value because bellow 1e-9 we run into floating point issues
+  return min === undefined ? undefined : [Math.max(min / extend, 1e-9), max * extend];
 }
 
 function padZeros(value: number, digits = 2): string {

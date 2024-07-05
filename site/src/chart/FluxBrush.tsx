@@ -44,6 +44,7 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
         // Don't go all the way down to prevent overlap with label
         range: [height - 15, 0],
         domain: wattExtent(data),
+        clamp: true
       }),
     [height, data]
   );
