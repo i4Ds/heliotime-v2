@@ -58,10 +58,11 @@ def _next_month_start(date: datetime) -> datetime:
 def _from_timeseries(timeseries: TimeSeries) -> Flux:
     df = timeseries.to_dataframe()
 
-    # xrsb_quality == 0 means the measurement doesn't have quality issues.
-    # See "Data Flags" section:
+    # Remove bad quality measurements according to:
     # https://www.ncei.noaa.gov/data/goes-space-environment-monitor/access/science/xrs/GOES_1-15_XRS_Science-Quality_Data_Readme.pdf
-    df = df[df.xrsb_quality == 0]
+    # Data from GOES 1-7 don't have the xrsb_quality flag yet.
+    if 'xrsb_quality' in df.columns:
+        df = df[df.xrsb_quality == 0]
 
     # Format data into a Flux series
     index = df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
