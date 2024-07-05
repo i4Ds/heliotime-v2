@@ -23,7 +23,7 @@ function useDebouncedFluxQuery(
   maxWaitMs = 200
 ): FluxSeries | undefined {
   const [debouncedView] = useDebounce(view, delayMs, { leading: true, maxWait: maxWaitMs });
-  const { data } = useQuery(useFluxQuery(width, debouncedView?.[0], debouncedView?.[1], true));
+  const { data } = useQuery(useFluxQuery(width, debouncedView?.[0], debouncedView?.[1]));
   return useMemo(
     () => (data === undefined ? undefined : selectFlux(data, view?.[0], view?.[1])),
     [data, view]
