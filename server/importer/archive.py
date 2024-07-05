@@ -7,6 +7,7 @@ from datetime import timedelta, datetime, timezone, time
 from pathlib import Path
 from typing import Callable, TypeVar, Any, Union
 
+import numpy as np
 import pandas as pd
 from asyncpg import Connection
 from parfive import Results
@@ -56,15 +57,29 @@ def _next_month_start(date: datetime) -> datetime:
 
 def _from_timeseries(timeseries: TimeSeries) -> Flux:
     df = timeseries.to_dataframe()
-    return df.set_index(
-        df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
-    ).xrsb.dropna().rename(FLUX_VALUE_NAME)
+
+    # xrsb_quality == 0 means the measurement doesn't have quality issues.
+    # See "Data Flags" section:
+    # https://www.ncei.noaa.gov/data/goes-space-environment-monitor/access/science/xrs/GOES_1-15_XRS_Science-Quality_Data_Readme.pdf
+    df = df[df.xrsb_quality == 0]
+
+    # Format data into a Flux series
+    index = df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
+    df = df.set_index(index).xrsb.rename(FLUX_VALUE_NAME)
+
+    # Remove obviously incorrect outliers
+    return df.replace((0, np.inf, -np.inf), np.nan).dropna()
 
 
 _TReturn = TypeVar('_TReturn')
 
 
 class ArchiveImporter(Importer):
+    """
+    Imports highest resolution data (1s-3s) from the data archives:
+    https://www.ngdc.noaa.gov/stp/satellite/goes-r.html
+    """
+
     max_download_tries: int = 5
     download_backoff: timedelta = timedelta(seconds=30)
 
