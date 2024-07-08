@@ -111,6 +111,8 @@ async def fetch_flux(
         end = datetime.now(timezone.utc)
 
     interval = (end - start) / resolution
+    # TODO: select time of first bucket entry
+    # TODO: add timeout
     records = await connection.fetch(
         f'''
             SELECT time_bucket($1, time) AS bucket, MAX(flux)

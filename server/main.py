@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import cast, Optional
@@ -52,6 +53,7 @@ async def get_flux(
     # TODO: check start < end
     # TODO: configure max resolution
     # TODO: investigate time inaccuracy (live data is not minute aligned)
+    # TODO: add resource utilization check
     async with db_pool.acquire() as connection:
         series = await fetch_flux(connection, min(max(resolution, 1), 2000), start, end)
         return [

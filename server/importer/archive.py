@@ -55,6 +55,53 @@ def _next_month_start(date: datetime) -> datetime:
     return _month_start(date.replace(day=1) + timedelta(days=32))
 
 
+def _previous_value(series: pd.Series) -> pd.Series:
+    # Must use rolling() instead of shift() because timeseries points are not always uniformly distributed.
+    return series.rolling(timedelta(seconds=5), closed='left').mean()
+
+
+def _top_percentile(series: pd.Series, percentage: float) -> float:
+    """
+    :return: The value at nth percentile of the series. Median would be 0.5.
+    """
+    trim_size = round(len(series) * percentage)
+    max_partition = np.argpartition(series.to_numpy(), -trim_size)
+    return series.iloc[max_partition[-trim_size]]
+
+
+def _clean_flux(flux: Flux) -> Flux:
+    # Remove obviously incorrect values
+    flux = flux.replace((0, np.inf, -np.inf), np.nan).dropna()
+
+    with np.errstate(invalid='ignore'):
+        # Value range is exponential so find outliers with log
+        log_flux = np.log10(flux)
+
+    # Calculate flux value acceleration (speed of change)
+    prev_flux = _previous_value(log_flux)
+    last_velocity = prev_flux - _previous_value(prev_flux)
+    current_velocity = log_flux - prev_flux
+    acceleration = current_velocity - last_velocity
+
+    # Mark measurements that introduce excessive acceleration
+    abs_acceleration = acceleration.abs()
+    top_acceleration = _top_percentile(abs_acceleration.dropna(), percentage=0.005)
+    is_outlier = abs_acceleration > max(top_acceleration, 0.1)
+
+    # Remove and split at marked
+    group_id = is_outlier.cumsum()[~is_outlier]
+    groups = flux[~is_outlier].groupby(group_id)
+
+    with np.errstate(invalid='ignore'):
+        return groups.filter(
+            lambda group:
+            # Filter flat groups (probably the satellites value border)
+            np.log10(group).std() > 0.001 and
+            # Filter short groups
+            group.index[-1] - group.index[0] > timedelta(minutes=2)
+        )
+
+
 def _from_timeseries(timeseries: TimeSeries) -> Flux:
     df = timeseries.to_dataframe()
 
@@ -66,10 +113,10 @@ def _from_timeseries(timeseries: TimeSeries) -> Flux:
 
     # Format data into a Flux series
     index = df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
-    df = df.set_index(index).xrsb.rename(FLUX_VALUE_NAME)
+    flux = df.set_index(index).xrsb.rename(FLUX_VALUE_NAME)
 
-    # Remove obviously incorrect outliers
-    return df.replace((0, np.inf, -np.inf), np.nan).dropna()
+    # Remove any sensor errors
+    return _clean_flux(flux)
 
 
 _TReturn = TypeVar('_TReturn')
