@@ -18,7 +18,7 @@ from sunpy.net.fido_factory import UnifiedResponse
 from sunpy.timeseries import TimeSeries
 
 from data.db import connect_db
-from data.flux import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, FluxSource
+from data.flux import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, FluxSource, empty_flux
 from ._base import Importer, ImporterProcess
 
 warnings.filterwarnings(
@@ -69,37 +69,110 @@ def _top_percentile(series: pd.Series, percentage: float) -> float:
     return series.iloc[max_partition[-trim_size]]
 
 
+def _change_speed(series: pd.Series, periods=1) -> pd.Series:
+    return series.diff(periods) / series.index.diff(periods).total_seconds()
+
+
+def _pick_abs_max(series_a: pd.Series, series_b: pd.Series) -> pd.Series:
+    return pd.concat((
+        series_b.abs(),
+        series_a.abs(),
+    ), axis=1).max(axis=1)
+
+
+# Centered window size used for smoothing noisy measurements.
+SMOOTHING_WINDOW = timedelta(minutes=2)
+# Centered windows size of how long the shortest flare would be.
+SUSTAINED_MOTION_WINDOW = timedelta(seconds=20)
+# What amount of relative velocity drop signifies noisy data.
+# At max only the smoothed value will be used, at min only the original one.
+MIN_VELOCITY_DROP = 0.65
+MAX_VELOCITY_DROP = 0.8
+
+
+def _denoise_flux(flux: Flux) -> Flux:
+    # Value range is exponential so smooth with log
+    rough = np.log10(flux)
+
+    # Compute rough and sustained velocities.
+    # If a big change is actually a flare, it will reside for at least a few seconds
+    # and the velocity will still be visible after smoothing.
+    rough_velocity = _change_speed(rough)
+    sustained = rough.rolling(SUSTAINED_MOTION_WINDOW, center=True).mean()
+    sustained_velocity = _change_speed(sustained)
+
+    # Take max as the big velocities are only at the edges of the flare,
+    # and we don't want to smooth the tops.
+    rough_velocity_max = rough_velocity.abs().rolling(SMOOTHING_WINDOW, center=True).max()
+    sustained_velocity_max = sustained_velocity.abs().rolling(SMOOTHING_WINDOW, center=True).max()
+
+    # Compute how much the velocities dropped and if they dropped quite far
+    # (meaning that part was noise not a sustained motion),
+    # mark them to be smoothed (value between 0 - 1).
+    relative_drop = 1 - (sustained_velocity_max / rough_velocity_max)
+    smooth_force = (
+            (relative_drop - MIN_VELOCITY_DROP) /
+            (MAX_VELOCITY_DROP - MIN_VELOCITY_DROP)
+    ).clip(lower=0, upper=1)
+
+    # Smooth the marked parts with the calculated force
+    smooth = rough.rolling(SMOOTHING_WINDOW, center=True).mean()
+    mixed = rough + (smooth - rough) * smooth_force
+    return 10 ** mixed
+
+
 def _clean_flux(flux: Flux) -> Flux:
     # Remove obviously incorrect values
-    flux = flux.replace((0, np.inf, -np.inf), np.nan).dropna()
+    # TODO: update live import with same clip values
+    flux = flux[(0 < flux) & (flux < 1)]
+    flux = _denoise_flux(flux)
 
     with np.errstate(invalid='ignore'):
         # Value range is exponential so find outliers with log
         log_flux = np.log10(flux)
 
     # Calculate flux value acceleration (speed of change)
-    prev_flux = _previous_value(log_flux)
-    last_velocity = prev_flux - _previous_value(prev_flux)
-    current_velocity = log_flux - prev_flux
-    acceleration = current_velocity - last_velocity
+    forward_velocity = _change_speed(log_flux)
+    forward_acceleration = _change_speed(forward_velocity)
+    backward_velocity = _change_speed(log_flux, -1)
+    backward_acceleration = _change_speed(backward_velocity, -1)
 
-    # Mark measurements that introduce excessive acceleration
-    abs_acceleration = acceleration.abs()
+    # Merge backwards and forwards directions.
+    # It is computed both ways because the measurements is not evenly distributed,
+    # so outliers immediately after a gap would be missed by the forward pass
+    # because the big value jump is damped by a big time gap.
+    abs_velocity = _pick_abs_max(backward_velocity, forward_velocity)
+    abs_acceleration = _pick_abs_max(backward_acceleration, forward_acceleration)
+
+    # Mark measurements that introduce excessive acceleration.
     top_acceleration = _top_percentile(abs_acceleration.dropna(), percentage=0.005)
-    is_outlier = abs_acceleration > max(top_acceleration, 0.1)
+    is_outlier = abs_acceleration > min(max(top_acceleration, 0.02), 0.015)
+
+    # Mark measurements after a large time gaps for splitting.
+    is_after_gap = is_outlier.index.diff() > timedelta(minutes=2)
 
     # Remove and split at marked
-    group_id = is_outlier.cumsum()[~is_outlier]
-    groups = flux[~is_outlier].groupby(group_id)
+    group_id = (is_outlier | is_after_gap).cumsum()[~is_outlier]
+    log_groups = log_flux[~is_outlier].groupby(group_id)
 
-    with np.errstate(invalid='ignore'):
-        return groups.filter(
-            lambda group:
-            # Filter flat groups (probably the satellites value border)
-            np.log10(group).std() > 0.001 and
-            # Filter short groups
-            group.index[-1] - group.index[0] > timedelta(minutes=2)
-        )
+    # Filter leftover groups
+    groups = deque()
+    for _, log_group in log_groups:
+        if (
+                # Filter flat groups (probably the satellite's value border)
+                log_group.std() < 0.001 or
+                # Filter short groups
+                log_group.index[-1] - log_group.index[0] < timedelta(minutes=2) or
+                # Filter out unnaturally fast changing groups (likely leftover outlier spots)
+                abs_velocity.loc[log_group.index].mean() > 0.003
+
+        ):
+            continue
+        # Add original values of the valid group
+        groups.append(flux.loc[log_group.index])
+
+    # Merge value groups together
+    return empty_flux() if len(groups) == 0 else pd.concat(groups)
 
 
 def _from_timeseries(timeseries: TimeSeries) -> Flux:
