@@ -172,7 +172,8 @@ def _clean_flux(flux: Flux) -> Flux:
         groups.append(flux.loc[log_group.index])
 
     # Merge value groups together
-    return empty_flux() if len(groups) == 0 else pd.concat(groups)
+    flux = empty_flux() if len(groups) == 0 else pd.concat(groups)
+    return flux.dropna()
 
 
 def _from_timeseries(timeseries: TimeSeries) -> Flux:
