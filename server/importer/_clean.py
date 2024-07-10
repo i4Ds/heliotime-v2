@@ -155,7 +155,14 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
 def clean_flux(flux: Flux) -> Flux:
     """
     Denoises and removes outliers from the provided measured flux.
-    Tuned to work on the archive data.
+
+    Tuned to work on the archive data. Dates to test:
+        (
+            '1980-09-25', '1980-09-28', '1984-02-06', '1985-05-02',
+            '1985-12-02', '1986-07-28', '1987-09-03', '1988-03-22',
+            '1991-04-30', '1995-10-04', '1995-10-06', '1996-07-07',
+            '2002-12-19', '2002-12-20', '2009-09-22', '2017-09-06'
+        )
     """
     # Remove obviously incorrect values
     flux = flux[(0 < flux) & (flux < 1)]
