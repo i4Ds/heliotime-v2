@@ -36,7 +36,7 @@ def _from_live_json(json: list[dict], start: datetime) -> Flux:
             if timestamp < start:
                 break
             flux = record['flux']
-            if math.isnan(flux) or math.isinf(flux) or flux == 0:
+            if not 0 < flux < 1:
                 continue
             yield timestamp, flux
 
