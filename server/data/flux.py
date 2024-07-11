@@ -159,5 +159,6 @@ async def fetch_first_flux_timestamp(connection: Connection) -> Optional[datetim
     return await connection.fetchval('SELECT MIN(time) FROM flux')
 
 
-async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource) -> Optional[datetime]:
-    return await connection.fetchval(f'SELECT MAX(time) FROM {source.table_name}')
+async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource | None = None) -> Optional[datetime]:
+    table_name = 'flux' if source is None else source.table_name
+    return await connection.fetchval(f'SELECT MAX(time) FROM {table_name}')

@@ -8,6 +8,7 @@ dependencies:
   # Base dependencies
   - fastapi=0.111
   - typer=0.12
+  - pydantic=2.8
   - sunpy=5.1
   - aiohttp=3.9
   - pandas=2.2

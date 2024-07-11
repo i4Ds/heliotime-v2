@@ -1,4 +1,3 @@
-import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import cast, Optional
@@ -7,9 +6,10 @@ import asyncpg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pandas import Timestamp
+from pydantic import BaseModel
 
 from data.db import create_db_pool, apply_db_migrations
-from data.flux import fetch_flux
+from data.flux import fetch_flux, fetch_first_flux_timestamp, fetch_last_flux_timestamp
 from importer.archive import ArchiveImporterProcess
 from importer.live import LiveImporterProcess
 from utils.logging import configure_logging
@@ -60,3 +60,18 @@ async def get_flux(
             (cast(Timestamp, timestamp).timestamp() * 1000, flux)
             for timestamp, flux in series.items()
         ]
+
+
+class Status(BaseModel):
+    start: datetime
+    end: datetime
+
+
+@app.get('/status')
+async def get_flux() -> Status:
+    async with db_pool.acquire() as connection:
+        # TODO: make single query
+        return Status(
+            start=await fetch_first_flux_timestamp(connection),
+            end=await fetch_last_flux_timestamp(connection),
+        )
