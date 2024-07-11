@@ -67,43 +67,28 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
   return (
     <div className={`overflow-hidden flex flex-col ${className ?? ''} `}>
       <div className="flex p-2 gap-2">
-        {/* TODO: refactor to button tailwind class */}
-        {/* TODO: do not show intervals which are too big */}
-        <button
-          className="px-2 py-1 rounded-md bg-blue-300"
-          type="button"
-          onClick={() => setFollowView(60 * 60 * 1000)}
-        >
-          1H
-        </button>
-        <button
-          className="px-2 py-1 rounded-md bg-blue-300"
-          type="button"
-          onClick={() => setFollowView(24 * 60 * 60 * 1000)}
-        >
-          1D
-        </button>
-        <button
-          className="px-2 py-1 rounded-md bg-blue-300"
-          type="button"
-          onClick={() => setFollowView(7 * 24 * 60 * 60 * 1000)}
-        >
-          1W
-        </button>
-        <button
-          className="px-2 py-1 rounded-md bg-blue-300"
-          type="button"
-          onClick={() => setFollowView(30 * 24 * 60 * 60 * 1000)}
-        >
-          1M
-        </button>
-        <button
-          className="px-2 py-1 rounded-md bg-blue-300"
-          type="button"
-          onClick={() => setFollowView(365 * 24 * 60 * 60 * 1000)}
-        >
-          1Y
-        </button>
+        {(
+          [
+            ['1H', 1 * 60 * 60 * 1000],
+            ['1D', 24 * 60 * 60 * 1000],
+            ['1W', 7 * 24 * 60 * 60 * 1000],
+            ['1M', 30 * 24 * 60 * 60 * 1000],
+            ['1Y', 365 * 24 * 60 * 60 * 1000],
+          ] as const
+        )
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          .filter(([_, viewSize]) => range[1] - range[0] > viewSize)
+          .map(([label, viewSize]) => (
+            <button
+              key={label}
+              // TODO: refactor to button tailwind class
+              className="px-2 py-1 rounded-md bg-blue-300"
+              type="button"
+              onClick={() => setFollowView(viewSize)}
+            >
+              {label}
+            </button>
+          ))}
         <button
           className="px-2 py-1 rounded-md bg-blue-300"
           type="button"
