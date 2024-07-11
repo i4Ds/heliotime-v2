@@ -2,9 +2,13 @@ import FluxBrush, { FluxBrushRef } from '@/chart/FluxBrush';
 import { FluxMain } from '@/chart/FluxMain';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ParentSize } from '@visx/responsive';
+import { useQuery } from '@tanstack/react-query';
+import { useFluxRangeQuery } from '@/api/flux';
+import { NumberRange, clipRange } from '@/utils/range';
 import { View } from './flux';
 
-const FOLLOW_LIVE_INTERVAL = 200;
+const LIVE_INTERVAL_MS = 200;
+const FOLLOW_THRESHOLD_MS = 500;
 
 export interface FluxChartProps {
   className?: string;
@@ -12,9 +16,10 @@ export interface FluxChartProps {
 }
 
 export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
+  const { data: dataRange } = useQuery(useFluxRangeQuery());
+  const [range, setRange] = useState<NumberRange>(dataRange ?? [0, 0]);
+  const [view, setRawView] = useState<View>(range);
   const brushRef = useRef<FluxBrushRef>(null);
-  const viewState = useState<View>();
-  const [view, setRawView] = viewState;
 
   // TODO: clean up brush state management and its problem
   // updateBrush flag is needed to prevent recursive updates from the brush
@@ -34,10 +39,9 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
   );
   const setFollowView = useCallback(
     (viewSize: number) => {
-      const now = Date.now();
-      setView([now - viewSize, now]);
+      setView([range[1] - viewSize, range[1]]);
     },
-    [setView]
+    [range, setView]
   );
   const panFollowView = useCallback(() => {
     if (view === undefined) return;
@@ -45,16 +49,20 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
   }, [setFollowView, view]);
 
   // Follow live time
+  const shouldFollow = range[1] - FOLLOW_THRESHOLD_MS < view[1];
   const pauseFollow = useRef(false);
-  const shouldFollow = view !== undefined && view[1] > Date.now() - FOLLOW_LIVE_INTERVAL * 2;
   useEffect(() => {
-    if (!shouldFollow) return undefined;
     const interval = setInterval(() => {
-      if (pauseFollow.current) return;
-      panFollowView();
-    }, FOLLOW_LIVE_INTERVAL);
+      const newRange: NumberRange = [dataRange?.[0] ?? 0, Date.now()];
+      const shouldFollowEnd = view[0] === range[0];
+      // Prevent brush jitter
+      if (!pauseFollow.current && (shouldFollow || shouldFollowEnd))
+        setView([shouldFollowEnd ? newRange[0] : view[0], shouldFollow ? newRange[1] : view[1]]);
+      setRange(newRange);
+      // TODO: adjust refresh rate based on view and range size
+    }, LIVE_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [panFollowView, pauseFollow, shouldFollow, view]);
+  }, [dataRange, panFollowView, pauseFollow, range, setView, shouldFollow, view]);
 
   return (
     <div className={`overflow-hidden flex flex-col ${className ?? ''} `}>
@@ -99,7 +107,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
         <button
           className="px-2 py-1 rounded-md bg-blue-300"
           type="button"
-          onClick={() => setView(undefined)}
+          onClick={() => setView(range)}
         >
           All
         </button>
@@ -123,12 +131,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
                   height={height - brushHeight - 40}
                   left={marginLeft}
                   view={view}
-                  setView={(setter) =>
-                    setView((previous) =>
-                      // Cannot call updateBrush here because setters need to be pure
-                      brushRef.current?.clampView(setter(previous))
-                    )
-                  }
+                  setView={(setter) => setView((previous) => clipRange(setter(previous), range))}
                   onTimeSelect={onTimeSelect}
                 />
                 <FluxBrush
@@ -137,7 +140,8 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
                   height={brushHeight}
                   top={height - brushHeight}
                   left={marginLeft}
-                  onBrush={(range) => setRawView(range)}
+                  range={range}
+                  onBrush={(newView) => setRawView(newView)}
                   onBrushStart={() => {
                     pauseFollow.current = true;
                   }}

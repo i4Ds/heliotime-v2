@@ -1,8 +1,18 @@
+import { NumberRange } from '@/utils/range';
 import { queryOptions } from '@tanstack/react-query';
 import { useRef } from 'react';
 
 export type FluxMeasurement = [timestamp: number, watts: number];
 export type FluxSeries = FluxMeasurement[];
+
+export async function fetchFluxRange(
+  signal?: AbortSignal
+): Promise<NumberRange> {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/status`, { signal });
+  if (!response.ok) throw new Error(`Fetch failed: ${response}`);
+  const json = await response.json();
+  return [new Date(json.start).getTime(), new Date(json.end).getTime()];
+}
 
 export async function fetchFluxSeries(
   resolution: number,
@@ -26,6 +36,13 @@ export function selectFlux(series: FluxSeries, start?: number, end?: number): Fl
   );
   const lastInclusive = series.findLastIndex(([timestamp]) => end === undefined || timestamp < end);
   return series.slice(firstInclusive, lastInclusive + 1);
+}
+
+export function useFluxRangeQuery() {
+  return queryOptions({
+    queryKey: ['flux-range'],
+    queryFn: ({signal}) => fetchFluxRange(signal)
+  });
 }
 
 class Fetch {

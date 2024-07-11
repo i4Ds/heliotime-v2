@@ -7,15 +7,16 @@ import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleTime } from '@visx/scale';
 import { LinePath } from '@visx/shape';
 import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { NumberRange } from '@/utils/range';
 import { PositionSizeProps } from './base';
-import { LINE_COLOR, formatTime, timeExtent as calcTimeExtent, wattExtent, View } from './flux';
+import { LINE_COLOR, formatTime, timeExtent, wattExtent, View } from './flux';
 
 export interface FluxBrushRef {
-  clampView(view: View): View;
   updateBrush(view: View): void;
 }
 
 export interface FluxBrushProps extends PositionSizeProps {
+  range: NumberRange;
   onBrush?: (view: View) => void;
   onBrushStart?: () => void;
   onBrushEnd?: () => void;
@@ -23,19 +24,18 @@ export interface FluxBrushProps extends PositionSizeProps {
 
 // eslint-disable-next-line prefer-arrow-callback
 export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
-  { width, height, top, left, onBrush, onBrushEnd, onBrushStart },
+  { width, height, top, left,range,  onBrush, onBrushEnd, onBrushStart },
   ref
 ) {
-  const { data } = useQuery(useFluxQuery(width));
+  const { data } = useQuery(useFluxQuery(width, range[0], range[1]));
 
-  const timeExtent = useMemo(() => calcTimeExtent(data), [data]);
   const timeScale = useMemo(
     () =>
       scaleTime({
         range: [0, width],
-        domain: timeExtent,
+        domain: range,
       }),
-    [timeExtent, width]
+    [range, width]
   );
 
   const wattScale = useMemo(
@@ -53,11 +53,6 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
   useImperativeHandle(
     ref,
     () => ({
-      clampView(view) {
-        if (timeExtent === undefined) return view;
-        if (view === undefined) return timeExtent;
-        return [Math.max(timeExtent[0], view[0]), Math.min(timeExtent[1], view[1])];
-      },
       updateBrush(view) {
         // Save reference to ensure safe access in callback
         const currentRef = brushRef.current;
@@ -65,7 +60,7 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
         if (
           view === undefined ||
           // Full brush is equivalent to no brush at all
-          (view[0] === timeExtent[0] && view[1] === timeExtent[1])
+          (view[0] === range[0] && view[1] === range[1])
         ) {
           currentRef.reset();
           return;
@@ -84,7 +79,7 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
         });
       },
     }),
-    [timeExtent, timeScale]
+    [range, timeScale]
   );
 
   // Only propagate onChange events if it is user initiated and not from updateBrush().
@@ -133,7 +128,7 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
             onBrushStart?.();
           }
           firstEnd.current = true;
-          onBrush?.(bounds === null ? undefined : [bounds.x0, bounds.x1]);
+          onBrush?.(bounds === null ? range : [bounds.x0, bounds.x1]);
         }}
         onBrushEnd={() => {
           if (!firstEnd.current) return;

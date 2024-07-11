@@ -7,7 +7,7 @@ import { createContext, useState } from 'react';
 // TODO: style properly
 export const LINE_COLOR = '#2582ec';
 
-export type View = Readonly<NumberRange> | undefined;
+export type View = Readonly<NumberRange>;
 
 export const ViewContext = createContext<ReturnType<typeof useState<NumberRange | undefined>>>([
   undefined,
