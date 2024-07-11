@@ -1,13 +1,12 @@
 import { NumberRange } from '@/utils/range';
-import { queryOptions } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { queryOptions, useQuery } from '@tanstack/react-query';
+import { useMemo, useRef } from 'react';
+import { useDebounce } from 'use-debounce';
 
 export type FluxMeasurement = [timestamp: number, watts: number];
 export type FluxSeries = FluxMeasurement[];
 
-export async function fetchFluxRange(
-  signal?: AbortSignal
-): Promise<NumberRange> {
+export async function fetchFluxRange(signal?: AbortSignal): Promise<NumberRange> {
   const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/status`, { signal });
   if (!response.ok) throw new Error(`Fetch failed: ${response}`);
   const json = await response.json();
@@ -41,94 +40,99 @@ export function selectFlux(series: FluxSeries, start?: number, end?: number): Fl
 export function useFluxRangeQuery() {
   return queryOptions({
     queryKey: ['flux-range'],
-    queryFn: ({signal}) => fetchFluxRange(signal)
+    queryFn: ({ signal }) => fetchFluxRange(signal),
   });
 }
 
-class Fetch {
-  static readonly TOO_LOW_RES_THRESHOLD = 1.5;
-
-  static readonly MIN_LIVE_LAG_MS = 3 * 60 * 1000;
-
-  readonly createdAt: number = Date.now();
-
-  constructor(
-    readonly data: FluxSeries,
-    readonly resolution: number,
-    readonly from = 0, // TODO: make global constant
-    readonly to = Date.now()
-  ) {}
-
-  /**
-   * Wether the provided configuration is equal enough to this fetch's configuration
-   * for it to make nearly no visual difference if we were to actually fetch it
-   * assuming no new data becomes available on the backend.
-   *
-   * @param from Defaults to 1970-01-01 before the first GOES Satellite existed.
-   * @param to Defaults to now.
-   */
-  isVisuallyEqual(resolution: number, from = 0, to = Date.now()): boolean {
-    if (this.from === from && this.to === to && this.resolution === resolution) return true;
-    if (this.data.length < 2) return false;
-
-    // Check if fetch resolution is too low
-    const startInterval = this.data[1][0] - this.data[0][0];
-    const interval = Fetch.calcInterval(this.from, this.to, this.resolution);
-    // If data has the requested resolution or higher (or tiny bit lower cause of inaccuracies)
-    // we have not yet reached the max resolution and can fetch better resolution.
-    // startInterval represents data resolution because it is the smallest if archive and live data is mixed.
-    if (startInterval <= interval + 100) {
-      const otherInterval = Fetch.calcInterval(from, to, resolution);
-      // console.log(interval / otherInterval);
-      if (interval > otherInterval * Fetch.TOO_LOW_RES_THRESHOLD) return false;
-    }
-
-    // Check if another interval could fit at the start
-    if (from < this.from - startInterval) return false;
-
-    // Check if another interval could fit at the end
-    const endInterval = this.data.at(-1)![0] - this.data.at(-2)![0];
-    return to <= this.to + endInterval;
-  }
-
-  selectData(from?: number, to?: number): FluxSeries {
-    return selectFlux(this.data, from, to);
-  }
-
-  private static calcInterval(from: number, to: number, resolution: number) {
-    return (to - from) / resolution;
-  }
-
-  /**
-   * If the fetched data has data up until the end,
-   * meaning at least the live data has fully caught up.
-   */
-  isLiveComplete(): boolean {
-    if (this.data.length < 2) return false;
-    const last = this.data.at(-1)![0];
-    const lastInterval = last - this.data.at(-2)![0];
-    return this.to < last + lastInterval;
-  }
+/**
+ * If the fetched data has data up until the end,
+ * meaning at least the live data has fully caught up.
+ */
+function isLiveComplete(series: FluxSeries | undefined, to: number): boolean {
+  if (series === undefined || series.length < 2) return false;
+  const last = series.at(-1)![0];
+  const lastInterval = last - series.at(-2)![0];
+  return to < last + lastInterval;
 }
 
-export function useFluxQuery(resolution: number, from?: number, to?: number) {
-  const lastFetch = useRef<Fetch | undefined>(undefined);
+export function fluxQueryOptions(from: number, to: number, resolution: number) {
   return queryOptions({
-    queryKey: ['flux', from, to, resolution, lastFetch],
-    queryFn: async () => {
-      const series = await fetchFluxSeries(resolution, from, to);
-      lastFetch.current = new Fetch(series, resolution, from, to);
-      return series;
-    },
-    // @ts-expect-error Accepts both FluxSeries and undefined but TS doesn't check it correctly
-    initialData: lastFetch.current?.isVisuallyEqual(resolution, from, to)
-      ? lastFetch.current?.selectData(from, to)
-      : undefined,
-    initialDataUpdatedAt: lastFetch.current?.createdAt,
+    queryKey: ['flux', from, to, resolution],
+    queryFn: async () => fetchFluxSeries(resolution, from, to),
     // When data is live complete only the archive data could slowly catch up so update slower.
-    staleTime: () => 1000 * (lastFetch.current?.isLiveComplete() ? 60 : 10),
-    refetchInterval: () => 60 * 1000 * (lastFetch.current?.isLiveComplete() ? 10 : 1),
+    staleTime: ({ state }) => 1000 * (isLiveComplete(state.data, to) ? 60 : 10),
+    refetchInterval: ({ state }) => 60 * 1000 * (isLiveComplete(state.data, to) ? 10 : 1),
     gcTime: 10 * 1000,
-    placeholderData: lastFetch.current?.selectData(from, to),
+    // placeholderData: lastFetch!.current?.selectData(from, to),
   });
+}
+
+export function useFlux(from: number, to: number, resolution: number): FluxSeries {
+  const lastFetch = useRef<FluxSeries>([]);
+  const { data = [], isFetched } = useQuery({
+    ...fluxQueryOptions(from, to, resolution),
+    placeholderData: selectFlux(lastFetch.current, from, to),
+  });
+  if (isFetched) lastFetch.current = data;
+  return data;
+}
+
+/**
+ * {@link useFlux} but debounces its input parameters.
+ */
+export function useDebouncedFlux(
+  from: number,
+  to: number,
+  resolution: number,
+  delayMs = 500,
+  maxWaitMs = 200
+): FluxSeries {
+  const [[debouncedFrom, debouncedTo, debouncedResolution]] = useDebounce(
+    [from, to, resolution],
+    delayMs,
+    { leading: true, maxWait: maxWaitMs }
+  );
+  const data = useFlux(debouncedFrom, debouncedTo, debouncedResolution);
+  return useMemo(() => selectFlux(data, from, to), [data, from, to]);
+}
+
+function resolutionCeil(value: number, resolution: number): number {
+  return Math.ceil(value / resolution) * resolution;
+}
+
+function resolutionFloor(value: number, resolution: number): number {
+  return Math.floor(value / resolution) * resolution;
+}
+
+function log(value: number, base: number): number {
+  return Math.log(value) / Math.log(base);
+}
+
+/**
+ * {@link useDebouncedFlux} but aligns its parameters to certain grids,
+ * making it use the cache more often.
+ */
+export function useStableDebouncedFlux(
+  from: number,
+  to: number,
+  resolution: number,
+  resolutionStepSize = 200,
+  intervalStepSize = 1.4,
+  relativeChunkSize = 0.5
+): FluxSeries {
+  // Stabilize resolution
+  let stableResolution = resolutionCeil(resolution, resolutionStepSize);
+
+  // Stabilize interval
+  const interval = (to - from) / stableResolution;
+  const stableInterval = intervalStepSize ** Math.ceil(log(interval, intervalStepSize));
+
+  // Stabilize from and to
+  const chunkSize = stableInterval * stableResolution * relativeChunkSize;
+  const stableFrom = resolutionFloor(from, chunkSize);
+  const stableTo = resolutionCeil(to, chunkSize);
+  stableResolution = Math.ceil((stableTo - stableFrom) / stableInterval);
+
+  const data = useDebouncedFlux(stableFrom, stableTo, stableResolution);
+  return useMemo(() => selectFlux(data, from, to), [data, from, to]);
 }

@@ -1,5 +1,4 @@
-import { useFluxQuery } from '@/api/flux';
-import { useQuery } from '@tanstack/react-query';
+import { useStableDebouncedFlux } from '@/api/flux';
 import { AxisTop } from '@visx/axis';
 import { Brush } from '@visx/brush';
 import BaseBrush from '@visx/brush/lib/BaseBrush';
@@ -27,7 +26,7 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
   { width, height, top, left,range,  onBrush, onBrushEnd, onBrushStart },
   ref
 ) {
-  const { data } = useQuery(useFluxQuery(width, range[0], range[1]));
+  const data = useStableDebouncedFlux(range[0], range[1], width);
 
   const timeScale = useMemo(
     () =>

@@ -1,7 +1,6 @@
-import { FluxMeasurement, FluxSeries, selectFlux, useFluxQuery } from '@/api/flux';
+import { FluxMeasurement, FluxSeries, selectFlux, useStableDebouncedFlux } from '@/api/flux';
 import { HorizontalBand } from '@/chart/HorizontalBand';
 import { toSuperScript } from '@/utils/super';
-import { useQuery } from '@tanstack/react-query';
 import { AxisBottom, AxisLeft } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
@@ -12,23 +11,8 @@ import { bisector } from 'd3-array';
 import { Dispatch, useCallback, useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
 import { zoomView } from '@/utils/zoom';
-import { useDebounce } from 'use-debounce';
 import { PositionSizeProps } from './base';
 import { LINE_COLOR, View, formatTime, timeExtent, wattExtent } from './flux';
-
-function useDebouncedFluxQuery(
-  view: View,
-  width: number,
-  delayMs = 500,
-  maxWaitMs = 200
-): FluxSeries | undefined {
-  const [debouncedView] = useDebounce(view, delayMs, { leading: true, maxWait: maxWaitMs });
-  const { data } = useQuery(useFluxQuery(width, debouncedView?.[0], debouncedView?.[1]));
-  return useMemo(
-    () => (data === undefined ? undefined : selectFlux(data, view?.[0], view?.[1])),
-    [data, view]
-  );
-}
 
 interface FluxMainProps extends PositionSizeProps {
   onTimeSelect?: (timestamp: Date) => void;
@@ -45,7 +29,7 @@ export function FluxMain({
   view,
   setView,
 }: FluxMainProps) {
-  const data = useDebouncedFluxQuery(view, width);
+  const data = useStableDebouncedFlux(view[0], view[1], width);
 
   const timeScale = useMemo(
     () =>
@@ -61,7 +45,7 @@ export function FluxMain({
       scaleLog({
         range: [height, 0],
         domain: wattExtent(data, 1.4),
-        clamp: true
+        clamp: true,
       }),
     [data, height]
   );
