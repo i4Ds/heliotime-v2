@@ -37,8 +37,7 @@ export function HorizontalBand<Scale extends BandScale>({
   label,
   labelOffset = 5,
   labelProps = {},
-  showLabelRelativeThreshold = 0.5,
-  showLabelAbsoluteThreshold = Math.max(height * 0.2, 30),
+  showLabelAbsoluteThreshold = Math.max(height * 0.1, 30),
   ...rectProps
 }: HorizontalBandProps<Scale>) {
   const y0 = scale(from);
@@ -47,10 +46,7 @@ export function HorizontalBand<Scale extends BandScale>({
   const clippedY0 = Math.max(0, y0);
   const clippedY1 = Math.min(height, y1);
   const clippedHeight = clippedY1 - clippedY0;
-  const trueHeight = y1 - y0;
-  const showLabel =
-    clippedHeight / trueHeight > showLabelRelativeThreshold ||
-    clippedHeight > showLabelAbsoluteThreshold;
+  const showLabel = clippedHeight > showLabelAbsoluteThreshold;
   return (
     <svg
       x={top}
