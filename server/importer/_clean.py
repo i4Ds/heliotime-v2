@@ -12,6 +12,8 @@ def _top_percentile(series: pd.Series, percentage: float) -> float:
     """
     :return: The value at nth percentile of the series. Median would be 0.5.
     """
+    if series.empty:
+        return np.NAN
     trim_size = round(len(series) * percentage)
     max_partition = np.argpartition(series.to_numpy(), -trim_size)
     return series.iloc[max_partition[-trim_size]]
@@ -164,14 +166,18 @@ def clean_flux(flux: Flux) -> Flux:
             '2002-12-19', '2002-12-20', '2009-09-22', '2017-09-06'
         )
     """
+    if flux.empty:
+        return empty_flux()
     # Remove obviously incorrect values
     flux = flux[(0 < flux) & (flux < 1)]
+    if flux.empty:
+        return empty_flux()
     with np.errstate(invalid='ignore'):
         # Value range is exponential so find outliers with log
         log_flux = np.log10(flux)
     log_flux = _denoise(log_flux)
     log_flux = _remove_outliers(log_flux)
-    if log_flux is None:
+    if log_flux is None or log_flux.empty:
         return empty_flux()
     # Return to normal distribution
     flux = 10 ** log_flux
