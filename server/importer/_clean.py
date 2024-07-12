@@ -36,36 +36,38 @@ def _pick_abs_max(series_a: pd.Series, series_b: pd.Series) -> pd.Series:
 
 
 # Centered window size used for smoothing noisy measurements.
-SMOOTHING_WINDOW = timedelta(minutes=4)
+SMOOTHING_WINDOW = timedelta(minutes=5)
 # Centered windows size of how long the shortest flare would be.
 SUSTAINED_MOTION_WINDOW = timedelta(seconds=20)
-# What amount of relative velocity drop signifies noisy data.
-# At max only the smoothed value will be used, at min only the original one.
-MIN_VELOCITY_DROP = 0.65
-MAX_VELOCITY_DROP = 0.725
 
 
 def _denoise(log_flux: pd.Series) -> pd.Series:
-    # Compute rough and sustained velocities.
-    # If a big change is actually a flare, it will reside for at least a few seconds
-    # and the velocity will still be visible after smoothing.
-    rough_velocity = _change_speed(log_flux)
+    # Smooth out possible noise while keeping any actual motion.
+    # Used to detect certain regions later.
     sustained = log_flux.rolling(SUSTAINED_MOTION_WINDOW, center=True).mean()
-    sustained_velocity = _change_speed(sustained)
 
+    # Mask already smooth parts
+    is_rough = (sustained - log_flux).abs() > 0.005
+
+    # Mark valid slopes to not smooth out solar flares.
+    # If a big change is actually a flare, it will reside for at least a few seconds
+    # and the cumulative velocity won't drop as much after smoothing
+    # compared to noisy data where values zigzag.
     # Take max as the big velocities are only at the edges of the flare,
     # and we don't want to smooth the tops.
-    rough_velocity_max = rough_velocity.abs().rolling(SMOOTHING_WINDOW, center=True).max()
-    sustained_velocity_max = sustained_velocity.abs().rolling(SMOOTHING_WINDOW, center=True).max()
+    rough_velocity_max = _change_speed(log_flux).abs() \
+        .rolling(SUSTAINED_MOTION_WINDOW, center=True).sum() \
+        .rolling(SMOOTHING_WINDOW, center=True).max()
+    sustained_velocity_max = _change_speed(sustained).abs() \
+        .rolling(SUSTAINED_MOTION_WINDOW, center=True).sum() \
+        .rolling(SMOOTHING_WINDOW, center=True).max()
+    is_valid_slope = (sustained_velocity_max / rough_velocity_max) > 0.35
 
-    # Compute how much the velocities dropped and if they dropped quite far
-    # (meaning that part was noise not a sustained motion),
-    # mark them to be smoothed (value between 0 - 1).
-    relative_drop = 1 - (sustained_velocity_max / rough_velocity_max)
-    smooth_force = (
-            (relative_drop - MIN_VELOCITY_DROP) /
-            (MAX_VELOCITY_DROP - MIN_VELOCITY_DROP)
-    ).clip(lower=0, upper=1)
+    # Combine and smooth out all flags to not create hard edges
+    is_valid_slope_nearby = is_valid_slope.rolling(SUSTAINED_MOTION_WINDOW, center=True).mean()
+    # If 20% nearby is rough, smooth also this point.
+    is_rough_nearby = (is_rough.rolling(SMOOTHING_WINDOW, center=True).mean() / 0.2).clip(upper=1)
+    smooth_force = pd.concat((1 - is_valid_slope_nearby, is_rough_nearby), axis=1, ).min(axis=1)
 
     # Calculate smoothing corrections
     smooth = log_flux.rolling(SMOOTHING_WINDOW, center=True).mean()
@@ -77,8 +79,8 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     max_correction = _top_percentile(corrections_without_nan, percentage=0.01)
     min_correction = -_top_percentile(-corrections_without_nan, percentage=0.01)
     corrections = corrections.clip(
-        upper=min(max_correction + 0.1, 0.8),
-        lower=max(min_correction - 0.1, -0.8)
+        upper=min(max_correction + 0.05, 0.8),
+        lower=max(min_correction - 0.05, -0.8)
     )
 
     # Apply corrections
@@ -100,13 +102,10 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     abs_acceleration = _pick_abs_max(backward_acceleration, forward_acceleration)
 
     # Mark measurements that introduce excessive acceleration.
-    normal_top_acceleration = _top_percentile(abs_acceleration.dropna(), percentage=0.03)
-    is_outlier = abs_acceleration > min(max(normal_top_acceleration * 1.5, 0.03), 0.01)
-
+    is_outlier = abs_acceleration > 0.02
     # Mark measurements after a large time gaps for splitting.
-    is_after_gap = cast(pd.Series, is_outlier).index.diff() > timedelta(seconds=30)
-
-    # Remove and split at marked
+    is_after_gap = cast(pd.Series, log_flux).index.diff() > timedelta(seconds=30)
+    # Remove outliers and split at marked
     group_id = (is_outlier | is_after_gap).cumsum()[~is_outlier]
     log_groups = log_flux[~is_outlier].groupby(group_id)
 
@@ -115,7 +114,7 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     for _, log_group in log_groups:
         if (
                 # Filter flat groups (probably the satellite's value border)
-                log_group.std() < 0.001 or
+                log_group.rolling(timedelta(minutes=30), center=True).std().min() < 0.001 or
                 # Filter short groups
                 log_group.index[-1] - log_group.index[0] < timedelta(minutes=2) or
                 # Filter out unnaturally fast changing groups (likely leftover outlier spots)
