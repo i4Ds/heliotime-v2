@@ -23,7 +23,7 @@ export interface FluxBrushProps extends PositionSizeProps {
 
 // eslint-disable-next-line prefer-arrow-callback
 export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
-  { width, height, top, left,range,  onBrush, onBrushEnd, onBrushStart },
+  { width, height, top, left, range, onBrush, onBrushEnd, onBrushStart },
   ref
 ) {
   const data = useStableDebouncedFlux(range[0], range[1], width);
@@ -43,7 +43,7 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
         // Don't go all the way down to prevent overlap with label
         range: [height - 15, 0],
         domain: wattExtent(data),
-        clamp: true
+        clamp: true,
       }),
     [height, data]
   );
@@ -81,21 +81,22 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
     [range, timeScale]
   );
 
+  // TODO: cleanup event handling
   // Only propagate onChange events if it is user initiated and not from updateBrush().
   const propagateEvents = useRef(false);
   // Clean up start and end events
   const firstChange = useRef(true);
-  const firstEnd = useRef(true);
+  const endTimeout = useRef<NodeJS.Timeout>();
   return (
     <svg
       width={width}
       height={height}
       y={top}
       x={left}
-      onMouseEnter={() => {
+      onMouseDown={() => {
         propagateEvents.current = true;
       }}
-      onMouseLeave={() => {
+      onMouseUp={() => {
         propagateEvents.current = false;
       }}
     >
@@ -126,17 +127,14 @@ export default forwardRef<FluxBrushRef, FluxBrushProps>(function FluxBrush(
             firstChange.current = false;
             onBrushStart?.();
           }
-          firstEnd.current = true;
+          clearTimeout(endTimeout.current);
           onBrush?.(bounds === null ? range : [bounds.x0, bounds.x1]);
-        }}
-        onBrushEnd={() => {
-          if (!firstEnd.current) return;
-          // Must be set in next cycle because onChange still gonna execute
-          setTimeout(() => {
-            firstChange.current = true;
-          });
-          firstEnd.current = false;
-          onBrushEnd?.();
+          // Built-in onBrushEnd does not always trigger correctly
+          if (onBrushEnd)
+            endTimeout.current = setTimeout(() => {
+              firstChange.current = true;
+              onBrushEnd();
+            }, 300);
         }}
       />
     </svg>
