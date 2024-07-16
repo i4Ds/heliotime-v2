@@ -1,0 +1,3 @@
+[submodule "site/visx"]
+	path = site/visx
+	url = ../visx.git

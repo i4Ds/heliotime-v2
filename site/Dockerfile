@@ -3,6 +3,9 @@ FROM node:22-bullseye AS builder
 ENV NEXT_TELEMETRY_DISABLED 1
 WORKDIR /app
 
+COPY visx ./visx
+RUN --mount=type=cache,target=/usr/local/share/.cache cd visx && yarn install --frozen-lockfile && yarn build
+
 COPY package.json .
 COPY yarn.lock .
 RUN --mount=type=cache,target=/usr/local/share/.cache yarn install --frozen-lockfile --ignore-engines

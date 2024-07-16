@@ -1,4 +1,4 @@
-import { FluxMeasurement, FluxSeries, selectFlux, useStableDebouncedFlux } from '@/api/flux';
+import { FluxMeasurement, useStableDebouncedFlux } from '@/api/flux';
 import { HorizontalBand } from '@/chart/HorizontalBand';
 import { toSuperScript } from '@/utils/super';
 import { AxisBottom, AxisLeft } from '@visx/axis';
@@ -115,8 +115,6 @@ export function FluxMain({
       onWheel={handleZoom}
       className="overflow-visible"
     >
-      {/* Invisible rect to catch interaction events. */}
-      <rect width={width} height={height} fill="transparent" />
       {[0, 1, 2, 3, 4].map((index) => (
         <HorizontalBand
           key={index}
@@ -165,6 +163,8 @@ export function FluxMain({
           </TooltipInPortal>
         </>
       )}
+      {/* Invisible rect to catch interaction events. */}
+      <rect width={width} height={height} fill="transparent" />
     </svg>
   );
 }
