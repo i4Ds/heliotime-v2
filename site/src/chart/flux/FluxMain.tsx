@@ -11,7 +11,7 @@ import { bisector } from 'd3-array';
 import { Dispatch, useCallback, useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
 import { zoomView } from '@/utils/zoom';
-import { PositionSizeProps } from './base';
+import { PositionSizeProps } from '../base';
 import { LINE_COLOR, View, formatTime, timeExtent, wattExtent } from './flux';
 
 interface FluxMainProps extends PositionSizeProps {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import FluxChart from '@/chart/FluxChart';
+import FluxChart from '@/chart/flux/FluxChart';
 import HelioView from './HelioView';
 
 export default function Home() {

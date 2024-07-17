@@ -2,17 +2,11 @@ import { FluxSeries } from '@/api/flux';
 import { NumberRange } from '@/utils/range';
 import { NumberLike } from '@visx/scale';
 import { extent } from 'd3-array';
-import { createContext, useState } from 'react';
 
 // TODO: style properly
 export const LINE_COLOR = '#2582ec';
 
 export type View = Readonly<NumberRange>;
-
-export const ViewContext = createContext<ReturnType<typeof useState<NumberRange | undefined>>>([
-  undefined,
-  () => {},
-]);
 
 export function timeExtent(navData: FluxSeries | undefined): NumberRange | undefined {
   return (navData?.length ?? 0) === 0 ? undefined : [navData![0][0], Date.now()];
