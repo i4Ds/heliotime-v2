@@ -28,7 +28,7 @@ export default function HelioView({ timestamp }: HelioViewProps) {
       <div className="flex flex-col gap-2">
         <div>{formatDate(timestamp)}</div>
         <a
-          className="px-4 py-2 rounded-md bg-blue-300"
+          className="px-4 py-2 rounded-md bg-blue-300 text-center"
           href={viewerUrl}
           target="_blank"
           rel="noopener"

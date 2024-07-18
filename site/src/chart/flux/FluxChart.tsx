@@ -49,8 +49,8 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
   }, [dataRange, panFollowView, range, setView, shouldFollowStart, view]);
 
   return (
-    <div className={`overflow-hidden flex flex-col ${className ?? ''} `}>
-      <div className="flex p-2 gap-2">
+    <div className={`flex flex-col ${className ?? ''}`}>
+      <div className="flex pb-2 gap-2 max-md:px-3">
         {(
           [
             ['1H', 1 * 60 * 60 * 1000],
@@ -88,26 +88,25 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
           -&gt;
         </button>
       </div>
-      <div className="overflow-hidden flex-grow select-none">
+      <div className="flex-grow select-none touch-none">
         <ParentSize>
           {({ width, height }) => {
             const brushHeight = height * 0.15;
-            const marginLeft = 70;
+            const mainLeftMargin = 70;
             return (
-              <svg width={width} height={height} className="overflow-visible">
+              <svg width={width} height={height} className='overflow-visible absolute'>
                 <FluxMain
-                  width={width - marginLeft}
+                  width={width - mainLeftMargin}
                   height={height - brushHeight - 40}
-                  left={marginLeft}
+                  left={mainLeftMargin}
                   view={view}
                   setView={(setter) => setView((previous) => clipRange(setter(previous), range))}
                   onTimeSelect={onTimeSelect}
                 />
                 <FluxBrush
-                  width={width - marginLeft}
+                  width={width}
                   height={brushHeight}
                   top={height - brushHeight}
-                  left={marginLeft}
                   range={range}
                   view={view}
                   onBrush={(newView) => setView(newView)}
