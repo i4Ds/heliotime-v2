@@ -52,7 +52,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
 
   return (
     <div className={`flex flex-col ${className ?? ''}`}>
-      <div className="flex pb-2 gap-2 max-md:px-3">
+      <div className="flex pb-2 gap-2 px-3">
         {(
           [
             ['1H', 1 * 60 * 60 * 1000],
@@ -90,7 +90,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
           -&gt;
         </button>
       </div>
-      <div className="flex-grow select-none touch-none">
+      <div className="flex-grow md:px-3">
         <ParentSize>
           {({ width, height }) => {
             const brushHeight = height * 0.15;

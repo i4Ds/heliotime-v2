@@ -9,9 +9,9 @@ export default function Home() {
   useEffect(() => setTimestamp(new Date()), []);
 
   return (
-    <main className="h-screen flex flex-col content-center justify-around gap-2 p-3 max-md:px-0">
-      <div className="flex justify-between max-sm:flex-col gap-2 max-md:px-3">
-        <h1 className="text-4xl mx-4 my-auto max-sm:text-3xl max-sm:text-center">
+    <main className="h-screen flex flex-col content-center justify-around gap-2 py-3">
+      <div className="hidden vsm:flex justify-between flex-col sm:flex-row gap-2 px-3">
+        <h1 className="text-3xl sm:text-4xl my-auto text-center sm:text-left">
           <div>Solar Activity Timeline</div>
         </h1>
         {timestamp && <HelioView timestamp={timestamp} />}
