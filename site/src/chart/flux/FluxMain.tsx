@@ -10,12 +10,22 @@ import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
 import { Dispatch, useCallback, useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
-import { zoomView } from '@/utils/zoom';
-import { PositionSizeProps } from '../base';
+import { pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
+import { Point } from '@visx/point';
+import { PointerStack } from '@/utils/pointer';
+import { useWindowEvent } from '@/utils/useWindowEvent';
 import { LINE_COLOR, View, formatTime, timeExtent, wattExtent } from './flux';
+import { PositionSizeProps } from '../base';
+
+function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
+  return (
+    lastPointA && lastPointB && Math.hypot(lastPointA.x - lastPointB.x, lastPointA.y - lastPointB.y)
+  );
+}
 
 interface FluxMainProps extends PositionSizeProps {
   onTimeSelect?: (timestamp: Date) => void;
+  minSizeMs: number;
   view: View;
   setView: Dispatch<(previous: View) => View>;
 }
@@ -26,6 +36,7 @@ export function FluxMain({
   top = 0,
   left = 0,
   onTimeSelect,
+  minSizeMs,
   view,
   setView,
 }: FluxMainProps) {
@@ -50,23 +61,12 @@ export function FluxMain({
     [data, height]
   );
 
-  const handleClick = useCallback(
-    (event: React.MouseEvent<SVGElement>) => {
-      if (onTimeSelect === undefined) return;
-      const point = localPoint(event);
-      if (point === null) return;
-      onTimeSelect(timeScale.invert(point.x));
-    },
-    [onTimeSelect, timeScale]
-  );
-
   const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
     useTooltip<FluxMeasurement>();
   const { containerRef, TooltipInPortal } = useTooltipInPortal();
-  const handleTooltip = useCallback(
-    (event: React.TouchEvent<SVGElement> | React.MouseEvent<SVGElement>) => {
-      const point = localPoint(event);
-      if (point === null || data === undefined || data.length === 0) {
+  const updateTooltip = useCallback(
+    (point?: Point) => {
+      if (point === undefined || data.length === 0) {
         hideTooltip();
         return;
       }
@@ -84,21 +84,93 @@ export function FluxMain({
     [data, hideTooltip, showTooltip, timeScale]
   );
 
-  const handleZoom = useCallback(
+  const handleClick = useCallback(
+    (event: React.MouseEvent<SVGElement>) => {
+      if (onTimeSelect === undefined) return;
+      const point = localPoint(event);
+      if (point === null) return;
+      onTimeSelect(timeScale.invert(point.x));
+    },
+    [onTimeSelect, timeScale]
+  );
+
+  const handleWheel = useCallback(
     (event: React.WheelEvent<SVGElement>) =>
       setView((current) => {
         const point = localPoint(event);
         if (point === null) return current;
         const currentOrDomain =
           current ?? (timeScale.domain().map((d) => d.getTime()) as NumberRange);
-        return zoomView(currentOrDomain, event.deltaY, {
-          focus: timeScale.invert(point.x).getTime(),
-          minRange: 5 * 60 * 1000,
-        });
+        return wheelZoomView(
+          currentOrDomain,
+          event.deltaY,
+          timeScale.invert(point.x).getTime(),
+          minSizeMs
+        );
       }),
-    [setView, timeScale]
+    [minSizeMs, setView, timeScale]
   );
 
+  // Handle drag interactions
+  const stack = useMemo(() => new PointerStack<Point | undefined>(2), []);
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent) => {
+      const point = localPoint(event) ?? undefined;
+      if (!stack.maybeAdd(event, point)) return;
+      updateTooltip(stack.length < 2 ? point : undefined);
+    },
+    [stack, updateTooltip]
+  );
+  useWindowEvent('pointermove', (event) => {
+    if (stack.length === 0 || !stack.has(event)) return;
+
+    // Show tooltip if there is only one pointer
+    const point = localPoint(event) ?? undefined;
+    if (stack.length === 1) updateTooltip(point);
+
+    // Get and update points
+    const [lastPointA, lastPointB] = stack.getAll();
+    stack.maybeUpdate(event, point);
+    const [pointA, pointB] = stack.getAll();
+
+    // Use euclidean distance instead of just
+    // X-axis distance for more intuitive behavior
+    const lastDistance = calcDistance(lastPointA, lastPointB);
+    const distance = calcDistance(pointA, pointB);
+
+    if (lastPointA === undefined || pointA === undefined) return;
+    setView((oldView) =>
+      pointerPanZoomView(
+        oldView,
+        timeScale.invert(lastPointA.x).getTime(),
+        timeScale.invert(pointA.x).getTime(),
+        lastPointB && timeScale.invert(lastPointB.x).getTime(),
+        pointB && timeScale.invert(pointB.x).getTime(),
+        lastDistance,
+        distance,
+        minSizeMs
+      )
+    );
+  });
+  useWindowEvent('pointerup', (event) => stack.maybeRemove(event));
+  useWindowEvent('pointercancel', (event) => stack.maybeRemove(event));
+
+  const handleHover = useCallback(
+    (event: React.PointerEvent) => {
+      if (stack.length > 0) return;
+      updateTooltip(localPoint(event) ?? undefined);
+    },
+    [stack, updateTooltip]
+  );
+  const handleHoverEnd = useCallback(
+    (event: React.PointerEvent) => {
+      if (stack.length > 0 || event.pointerType !== 'mouse') return;
+      hideTooltip();
+    },
+    [hideTooltip, stack]
+  );
+
+  const timeTicks = width / 140;
   return (
     <svg
       ref={containerRef}
@@ -107,12 +179,11 @@ export function FluxMain({
       x={left}
       y={top}
       onClick={handleClick}
-      onTouchStart={handleTooltip}
-      onTouchMove={handleTooltip}
-      onMouseMove={handleTooltip}
-      onMouseLeave={() => hideTooltip()}
-      // TODO: support touch
-      onWheel={handleZoom}
+      onPointerDown={handlePointerDown}
+      onPointerOver={handleHover}
+      onPointerMove={handleHover}
+      onPointerLeave={handleHoverEnd}
+      onWheel={handleWheel}
       className="overflow-visible"
     >
       {[0, 1, 2, 3, 4].map((index) => (
@@ -129,14 +200,14 @@ export function FluxMain({
           labelProps={{ textAnchor: 'end' }}
         />
       ))}
-      <GridColumns scale={timeScale} height={height} numTicks={8} stroke="#0002" />
+      <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke="#0002" />
       <LinePath
         data={data}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}
         stroke={LINE_COLOR}
       />
-      <AxisBottom top={height} scale={timeScale} tickFormat={formatTime} numTicks={8} />
+      <AxisBottom top={height} scale={timeScale} tickFormat={formatTime} numTicks={timeTicks} />
       <AxisLeft
         scale={wattScale}
         label="X-ray Flux ( W/m² )"

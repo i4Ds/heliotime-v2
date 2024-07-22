@@ -1,8 +1,10 @@
 import { NumberRange } from '@/utils/range';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useWindowEvent } from '@/utils/useWindowEvent';
 import { localPoint } from '@visx/event';
 import { useVolatile, useVolatileState } from '@/utils/useVolatile';
+import { limitView } from '@/utils/panZoom';
+import { PointerStack } from '@/utils/pointer';
 import { PositionSizeProps } from './base';
 
 const TOUCH_EDGE_WIDTH = 15;
@@ -51,84 +53,103 @@ class Move {
 
 type Action = Move | StartDraw;
 
-function getClientX(event: MouseEvent | TouchEvent) {
-  return (event instanceof MouseEvent ? event : event.touches[0]).clientX;
-}
-
 export interface BrushProps extends PositionSizeProps {
   view: BrushView;
+  minSize?: number;
   onBrush: (view: BrushView) => void;
 }
 
-export default function Brush({ width, height, top, left, view, onBrush }: BrushProps) {
+export default function Brush({
+  width,
+  height,
+  top,
+  left,
+  view,
+  minSize: rawMinSize = 0,
+  onBrush,
+}: BrushProps) {
+  const minSize = Math.min(width, rawMinSize);
   const [renderAction, getAction, setAction] = useVolatileState<Action>();
   const [getVolatileView, setVolatileView, syncVolatileView] = useVolatile(view, onBrush);
-  const lastXRef = useRef<number>();
+  const stack = useMemo(() => new PointerStack<number>(1), []);
 
   const startAction = useCallback(
-    (newMode: Move | StartDraw) => (event: React.MouseEvent | React.TouchEvent) => {
-      lastXRef.current = getClientX(event.nativeEvent);
+    (newMode: Move | StartDraw) => (event: React.PointerEvent) => {
+      if (!stack.maybeAdd(event, event.clientX)) return;
       setAction(newMode);
       syncVolatileView();
     },
-    [setAction, syncVolatileView]
+    [setAction, stack, syncVolatileView]
   );
 
-  const processAction = useCallback(
-    (event: MouseEvent | TouchEvent) => {
-      const volatileView = getVolatileView();
-      const interaction = getAction();
+  useWindowEvent('pointermove', (event: PointerEvent) => {
+    // Track mouse delta (event.movementX is discouraged)
+    const lastX = stack.get(event);
+    if (lastX === undefined) return;
+    stack.maybeUpdate(event, event.clientX);
+    let delta = event.clientX - lastX;
 
-      // Track mouse delta (event.movementX is discouraged)
-      const currentX = getClientX(event);
-      const lastX = lastXRef.current ?? currentX;
-      lastXRef.current = currentX;
-      let delta = currentX - lastX;
-
-      // Handle idle
-      if (interaction === undefined) return;
-
-      // Handle start draw action
-      if (interaction === START_DRAW) {
-        if (delta === 0) return;
-        const point = localPoint(event);
-        if (point === null) return;
-        setVolatileView(delta > 0 ? [point.x - delta, point.x] : [point.x, point.x - delta]);
-        setAction(delta > 0 ? Move.RIGHT : Move.LEFT);
-        return;
-      }
-
-      // Handle move action
-      if (delta === 0 || volatileView === undefined) return;
-      // Prevent movement beyond border
-      if (delta < 0 && interaction.left) delta = Math.max(-volatileView[0], delta);
-      if (delta > 0 && interaction.right) delta = Math.min(width - volatileView[1], delta);
-      // Create updated view
-      let newView: BrushView = [
-        volatileView[0] + (interaction.left ? delta : 0),
-        volatileView[1] + (interaction.right ? delta : 0),
-      ];
-      // Switch sides if one side was dragged over the other
-      if (newView[0] > newView[1]) {
-        newView = [newView[1], newView[0]];
-        setAction(interaction.left ? Move.RIGHT : Move.LEFT);
-      }
-      setVolatileView(newView);
-    },
-    [getAction, getVolatileView, setAction, setVolatileView, width]
-  );
-  useWindowEvent('mousemove', processAction);
-  useWindowEvent('touchmove', processAction);
-
-  const endAction = useCallback(() => {
+    const volatileView = getVolatileView();
     const interaction = getAction();
+
+    // Handle idle
     if (interaction === undefined) return;
-    if (interaction === START_DRAW) setVolatileView(undefined);
-    setAction(undefined);
-  }, [getAction, setAction, setVolatileView]);
-  useWindowEvent('mouseup', endAction);
-  useWindowEvent('touchcancel', endAction);
-  useWindowEvent('touchend', endAction);
+
+    // Handle start draw action
+    if (interaction === START_DRAW) {
+      if (delta === 0) return;
+      const point = localPoint(event);
+      if (point === null) return;
+      const newSize = Math.max(minSize, Math.abs(delta));
+      setVolatileView(
+        limitView(
+          [point.x - (delta < 0 ? 0 : newSize), point.x + (delta > 0 ? 0 : newSize)],
+          [0, width]
+        )
+      );
+      setAction(delta > 0 ? Move.RIGHT : Move.LEFT);
+      return;
+    }
+
+    // Handle move action
+    if (delta === 0 || volatileView === undefined) return;
+    // Prevent movement beyond border
+    if (delta < 0)
+      delta = Math.max(-(interaction.left ? volatileView[0] : volatileView[1] - minSize), delta);
+    else if (delta > 0)
+      delta = Math.min(
+        width - (interaction.right ? volatileView[1] : volatileView[0] + minSize),
+        delta
+      );
+    // Create updated view
+    let newView: BrushView = [
+      volatileView[0] + (interaction.left ? delta : 0),
+      volatileView[1] + (interaction.right ? delta : 0),
+    ];
+    // Switch sides if view got too small
+    const missingSize = minSize - (newView[1] - newView[0]);
+    if (missingSize > 0) {
+      newView = [
+        Math.min(...newView) - (interaction.right ? missingSize : 0),
+        Math.max(...newView) + (interaction.left ? missingSize : 0),
+      ];
+      setAction(interaction.left ? Move.RIGHT : Move.LEFT);
+    }
+    setVolatileView(newView);
+  });
+
+  const endAction = useCallback(
+    (event: PointerEvent) => {
+      if (!stack.maybeRemove(event)) return;
+      const interaction = getAction();
+      if (interaction === undefined) return;
+      if (interaction === START_DRAW) setVolatileView(undefined);
+      setAction(undefined);
+    },
+    [getAction, setAction, setVolatileView, stack]
+  );
+  useWindowEvent('pointerup', endAction);
+  useWindowEvent('pointercancel', endAction);
 
   return (
     <svg x={top} y={left} width={width} height={height} className="overflow-visible">
@@ -136,8 +157,7 @@ export default function Brush({ width, height, top, left, view, onBrush }: Brush
         width={width}
         height={height}
         fill="transparent"
-        onMouseDown={startAction(START_DRAW)}
-        onTouchStart={startAction(START_DRAW)}
+        onPointerDown={startAction(START_DRAW)}
       />
       {view && (
         <>
@@ -146,22 +166,19 @@ export default function Brush({ width, height, top, left, view, onBrush }: Brush
             width={view[1] - view[0]}
             height={height}
             className="fill-blue-300 opacity-40 cursor-move"
-            onMouseDown={startAction(Move.BOTH)}
-            onTouchStart={startAction(Move.BOTH)}
+            onPointerDown={startAction(Move.BOTH)}
           />
           <BrushHandel
             x={view[0]}
             height={height}
             isActive={renderAction instanceof Move && renderAction.left && !renderAction.right}
-            onMouseDown={startAction(Move.LEFT)}
-            onTouchStart={startAction(Move.LEFT)}
+            onPointerDown={startAction(Move.LEFT)}
           />
           <BrushHandel
             x={view[1]}
             height={height}
             isActive={renderAction instanceof Move && !renderAction.left && renderAction.right}
-            onMouseDown={startAction(Move.RIGHT)}
-            onTouchStart={startAction(Move.RIGHT)}
+            onPointerDown={startAction(Move.RIGHT)}
           />
         </>
       )}

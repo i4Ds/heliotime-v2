@@ -2,13 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { ParentSize } from '@visx/responsive';
 import { useQuery } from '@tanstack/react-query';
 import { useFluxRangeQuery } from '@/api/flux';
-import { NumberRange, clipRange } from '@/utils/range';
+import { NumberRange } from '@/utils/range';
+import { limitView } from '@/utils/panZoom';
 import { FluxMain } from './FluxMain';
 import FluxBrush from './FluxBrush';
 import { View } from './flux';
 
 const LIVE_INTERVAL_MS = 200;
 const FOLLOW_THRESHOLD_MS = 500;
+const MIN_VIEW_SIZE_MS = 5 * 60 * 1000;
 
 export interface FluxChartProps {
   className?: string;
@@ -94,13 +96,19 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
             const brushHeight = height * 0.15;
             const mainLeftMargin = 70;
             return (
-              <svg width={width} height={height} className='overflow-visible absolute'>
+              <svg
+                width={width}
+                height={height}
+                className="select-none touch-none overflow-visible absolute"
+                onContextMenuCapture={(event) => event.preventDefault()}
+              >
                 <FluxMain
                   width={width - mainLeftMargin}
                   height={height - brushHeight - 40}
                   left={mainLeftMargin}
                   view={view}
-                  setView={(setter) => setView((previous) => clipRange(setter(previous), range))}
+                  minSizeMs={MIN_VIEW_SIZE_MS}
+                  setView={(setter) => setView((previous) => limitView(setter(previous), range))}
                   onTimeSelect={onTimeSelect}
                 />
                 <FluxBrush
@@ -109,6 +117,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
                   top={height - brushHeight}
                   range={range}
                   view={view}
+                  minSizeMs={MIN_VIEW_SIZE_MS}
                   onBrush={(newView) => setView(newView)}
                 />
               </svg>

@@ -12,6 +12,7 @@ import Brush from '../Brush';
 export interface FluxBrushProps extends PositionSizeProps {
   range: NumberRange;
   view: View;
+  minSizeMs: number;
   onBrush: (view: View) => void;
 }
 
@@ -23,6 +24,7 @@ export default function FluxBrush({
   left,
   range,
   view,
+  minSizeMs,
   onBrush,
 }: FluxBrushProps) {
   const data = useStableDebouncedFlux(range[0], range[1], width);
@@ -72,6 +74,7 @@ export default function FluxBrush({
         width={width}
         height={height}
         view={brushView}
+        minSize={timeScale(range[0] + minSizeMs)}
         onBrush={(newView) =>
           onBrush(
             newView === undefined
