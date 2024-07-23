@@ -9,7 +9,7 @@ export default function Home() {
   useEffect(() => setTimestamp(new Date()), []);
 
   return (
-    <main className="h-screen flex flex-col content-center justify-around gap-2 py-3">
+    <main className="h-dvh flex flex-col content-center justify-around gap-2 py-3">
       <div className="hidden vsm:flex justify-between flex-col sm:flex-row gap-2 px-3">
         <h1 className="text-3xl sm:text-4xl my-auto text-center sm:text-left">
           <div>Solar Activity Timeline</div>
