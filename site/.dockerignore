@@ -1,5 +1,6 @@
 # Ignore big unneeded folders to avoid big build context transfers.
 # Is required because podman currently does not support buildkit.
 .next/
+# Do not ignore visx/.git because lerna needs it
+.git/
 **/node_modules/
-**/.git/
