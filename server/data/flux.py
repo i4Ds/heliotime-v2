@@ -100,7 +100,8 @@ async def fetch_flux(
         connection: Connection,
         resolution: int,
         start: Optional[datetime] = None,
-        end: Optional[datetime] = None
+        end: Optional[datetime] = None,
+        timeout: Optional[timedelta] = None,
 ) -> Flux:
     if start is None:
         start = await fetch_first_flux_timestamp(connection)
@@ -121,7 +122,8 @@ async def fetch_flux(
             GROUP BY bucket
             ORDER BY bucket
         ''',
-        interval, start, end
+        interval, start, end,
+        timeout=None if timeout is None else timeout.total_seconds()
     )
     return empty_flux() if len(records) == 0 else pd.DataFrame(
         records,

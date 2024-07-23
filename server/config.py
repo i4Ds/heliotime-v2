@@ -11,3 +11,6 @@ DATABASE_URL = f'postgresql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_
 IMPORT_START = datetime.fromisoformat(os.environ['IMPORT_START']).astimezone(timezone.utc) \
     if 'IMPORT_START' in os.environ and len(os.environ['IMPORT_START']) > 0 else \
     datetime.now(tz=timezone.utc) - timedelta(days=30)
+
+FLUX_MAX_RESOLUTION = int(os.environ.get('FLUX_MAX_RESOLUTION', 2000))
+FLUX_QUERY_TIMEOUT = timedelta(seconds=float(os.environ.get('FLUX_QUERY_TIMEOUT', 10)))

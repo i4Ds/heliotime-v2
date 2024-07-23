@@ -3,11 +3,12 @@ from datetime import datetime
 from typing import cast, Optional
 
 import asyncpg
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pandas import Timestamp
 from pydantic import BaseModel
 
+from config import FLUX_QUERY_TIMEOUT, FLUX_MAX_RESOLUTION
 from data.db import create_db_pool, apply_db_migrations
 from data.flux import fetch_flux, fetch_first_flux_timestamp, fetch_last_flux_timestamp
 from importer.archive import ArchiveImporterProcess
@@ -50,12 +51,19 @@ async def get_flux(
         start: Optional[datetime] = None,
         end: Optional[datetime] = None
 ):
-    # TODO: check start < end
-    # TODO: configure max resolution
+    if start is not None and end is not None and start > end:
+        raise HTTPException(400, '"start" timestamp must be before "end" timestamp.')
     # TODO: investigate time inaccuracy (live data is not minute aligned)
     # TODO: add resource utilization check
+    resolution = min(max(resolution, 1), FLUX_MAX_RESOLUTION)
     async with db_pool.acquire() as connection:
-        series = await fetch_flux(connection, min(max(resolution, 1), 2000), start, end)
+        try:
+            series = await fetch_flux(
+                connection, resolution, start, end,
+                timeout=FLUX_QUERY_TIMEOUT
+            )
+        except TimeoutError:
+            raise HTTPException(503, 'Query took too long to execute.')
         return [
             (cast(Timestamp, timestamp).timestamp() * 1000, flux)
             for timestamp, flux in series.items()

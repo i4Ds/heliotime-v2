@@ -28,7 +28,9 @@ services:
       - DATABASE_PORT=${DATABASE_PORT:-5432}
       - DATABASE_DATABASE=${DATABASE_DATABASE:-postgres}
       - DATABASE_USERNAME=${DATABASE_USERNAME:-postgres}
-      - IMPORT_START=${IMPORT_START:-}
+      - IMPORT_START
+      - FLUX_MAX_RESOLUTION
+      - FLUX_QUERY_TIMEOUT
   site:
     build:
       context: ./site
