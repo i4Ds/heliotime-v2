@@ -9,13 +9,9 @@ export default function Home() {
   useEffect(() => setTimestamp(new Date()), []);
 
   return (
-    <main className="flex flex-col content-center justify-around gap-2 pt-3 pb-1 hxs:pb-3">
-      <div className="hidden hxs:flex justify-between flex-col sm:flex-row gap-2 px-3">
-        <h1 className="text-3xl sm:text-4xl my-auto text-center sm:text-left">
-          Solar Activity Timeline
-        </h1>
-        {timestamp && <HelioView timestamp={timestamp} />}
-      </div>
+    <main className="flex flex-col content-center justify-around gap-4 pt-2 pb-1 hxs:pb-3">
+      {/* TODO: Show button in FluxChart when HelioView is hidden */}
+      {timestamp && <HelioView timestamp={timestamp} className='hidden hmd:flex h-[40dvh]'/>}
       <FluxChart className="flex-grow" onTimeSelect={setTimestamp} />
     </main>
   );

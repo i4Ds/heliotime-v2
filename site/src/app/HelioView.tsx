@@ -19,32 +19,34 @@ function formatDate(date: Date): string {
 
 export interface HelioViewProps {
   timestamp: Date;
+  className?: string;
 }
 
-export default function HelioView({ timestamp }: HelioViewProps) {
+export default function HelioView({ timestamp, className = '' }: HelioViewProps) {
   const viewerUrl = useMemo(() => getHelioviewerUrl(timestamp), [timestamp]);
   return (
-    <div className="flex justify-center items-center gap-3">
-      <div className="flex flex-col gap-2">
-        <div>{formatDate(timestamp)}</div>
-        <a
-          className="btn btn-primary"
-          href={viewerUrl}
-          target="_blank"
-          rel="noopener"
-        >
-          {viewActionText}
-        </a>
-      </div>
-      <a href={viewerUrl} target="_blank" rel="noopener" title={viewActionText}>
+    <div className={`flex flex-col justify-center items-center gap-2 ${className}`}>
+      <h1>Helioviewer Preview</h1>
+      <a
+        href={viewerUrl}
+        target="_blank"
+        rel="noopener"
+        title={viewActionText}
+        className="relative flex-grow aspect-square overflow-hidden rounded-md border-2 border-bg-2"
+      >
         <Image
-          className="max-w-32 rounded-md"
-          src={getSolarImageUrl(timestamp)}
-          alt={`The sun at ${timestamp}`}
-          width={500}
-          height={500}
+          src="_" // Required but useless
+          loader={({ width }) => getSolarImageUrl(timestamp, width)}
+          alt="Sun imaged by SDO"
+          fill
           priority
         />
+        <div className="absolute w-full px-2 bottom-1 text-center text-xs text-text-dim">
+          Imaged by SDO at {formatDate(timestamp)}
+        </div>
+      </a>
+      <a className="btn btn-primary" href={viewerUrl} target="_blank" rel="noopener">
+        {viewActionText}
       </a>
     </div>
   );

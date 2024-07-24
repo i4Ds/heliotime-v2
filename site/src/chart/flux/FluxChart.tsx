@@ -53,33 +53,44 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
 
   return (
     <div className={`flex flex-col gap-2 ${className ?? ''}`}>
-      <div className="flex gap-2 px-3">
-        {(
-          [
-            ['1H', 1 * 60 * 60 * 1000],
-            ['1D', 24 * 60 * 60 * 1000],
-            ['1W', 7 * 24 * 60 * 60 * 1000],
-            ['1M', 30 * 24 * 60 * 60 * 1000],
-            ['1Y', 365 * 24 * 60 * 60 * 1000],
-          ] as const
-        )
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          .filter(([_, viewSize]) => range[1] - range[0] > viewSize)
-          .map(([label, viewSize]) => (
-            <button key={label} type="button" onClick={() => setFollowView(viewSize)}>
-              {label}
-            </button>
-          ))}
-        <button type="button" onClick={() => setView(range)}>
-          All
-        </button>
-        <button
-          className={`ml-auto ${shouldFollowStart ? 'btn-invert' : ''}`}
-          type="button"
-          onClick={() => panFollowView()}
-        >
-          -&gt;
-        </button>
+      <h1 className="sm:hidden text-center">Solar Activity Timeline</h1>
+      <div className="flex px-3">
+        <div className="flex-grow basis-0 flex items-center gap-2">
+          {(
+            [
+              ['1H', 1 * 60 * 60 * 1000],
+              ['1D', 24 * 60 * 60 * 1000],
+              ['1W', 7 * 24 * 60 * 60 * 1000],
+              ['1M', 30 * 24 * 60 * 60 * 1000],
+              ['1Y', 365 * 24 * 60 * 60 * 1000],
+            ] as const
+          )
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            .filter(([_, viewSize]) => range[1] - range[0] > viewSize)
+            .map(([label, viewSize]) => (
+              <button
+                key={label}
+                type="button"
+                className="btn-tiny"
+                onClick={() => setFollowView(viewSize)}
+              >
+                {label}
+              </button>
+            ))}
+          <button type="button" className="btn-tiny" onClick={() => setView(range)}>
+            All
+          </button>
+        </div>
+        <h1 className="mx-2 hidden sm:block">Solar Activity Timeline</h1>
+        <div className="flex-grow basis-0 flex items-center flex-row-reverse">
+          <button
+            className={`btn-tiny ${shouldFollowStart ? 'btn-invert' : ''}`}
+            type="button"
+            onClick={() => panFollowView()}
+          >
+            -&gt;
+          </button>
+        </div>
       </div>
       <div className="flex-grow px-1 md:px-3">
         <ParentSize>
@@ -94,7 +105,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
                 onContextMenuCapture={(event) => event.preventDefault()}
               >
                 <FluxMain
-                  width={width - mainLeftMargin- 56}
+                  width={width - mainLeftMargin - 56}
                   height={height - brushHeight - 60}
                   left={mainLeftMargin}
                   view={view}
