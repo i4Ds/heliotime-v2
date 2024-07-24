@@ -19,18 +19,19 @@ export interface FluxChartProps {
 
 export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
   const { data: dataRange } = useQuery(useFluxRangeQuery());
-  const [range, setRange] = useState<NumberRange>(dataRange ?? [0, 0]);
+  const [range, setRange] = useState<NumberRange>([0, 0]);
   const [view, setView] = useState<View>(range);
   const setFollowView = useCallback(
-    (viewSize: number) => {
-      setView([range[1] - viewSize, range[1]]);
-    },
+    (viewSize: number) => setView([range[1] - viewSize, range[1]]),
     [range, setView]
   );
-  const panFollowView = useCallback(() => {
-    if (view === undefined) return;
-    setFollowView(view[1] - view[0]);
-  }, [setFollowView, view]);
+  const panFollowView = useCallback(() => setFollowView(view[1] - view[0]), [setFollowView, view]);
+
+  // Set default view to 1 day look back
+  useEffect(() => {
+    const now = Date.now();
+    setView([now - 24 * 60 * 60 * 1000, now]);
+  }, []);
 
   // Follow live time
   const shouldFollowStart = range[1] - FOLLOW_THRESHOLD_MS < view[1];
