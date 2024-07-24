@@ -21,15 +21,15 @@ function padZeros(value: number, digits = 2): string {
 
 export function formatTime(value: Date | NumberLike): string | undefined {
   if (!(value instanceof Date)) return undefined;
-  if (value.getTime() === new Date(value).setHours(0, 0, 0, 0)) {
-    let text = padZeros(value.getFullYear(), 4);
-    if (value.getMonth() !== 0 || value.getDate() !== 1)
-      text += `-${padZeros(value.getMonth() + 1)}`;
-    if (value.getDate() !== 1) text += `-${padZeros(value.getDate())}`;
+  if (value.getTime() === new Date(value).setUTCHours(0, 0, 0, 0)) {
+    let text = padZeros(value.getUTCFullYear(), 4);
+    if (value.getUTCMonth() !== 0 || value.getUTCDate() !== 1)
+      text += `-${padZeros(value.getUTCMonth() + 1)}`;
+    if (value.getUTCDate() !== 1) text += `-${padZeros(value.getUTCDate())}`;
     return text;
   }
-  let text = `${padZeros(value.getHours())}:${padZeros(value.getMinutes())}`;
-  if (value.getSeconds() !== 0) text += `:${padZeros(value.getSeconds())}`;
-  if (value.getMilliseconds() !== 0) text += `:${padZeros(value.getMilliseconds(), 3)}`;
+  let text = `${padZeros(value.getUTCHours())}:${padZeros(value.getUTCMinutes())}`;
+  if (value.getUTCSeconds() !== 0) text += `:${padZeros(value.getUTCSeconds())}`;
+  if (value.getUTCMilliseconds() !== 0) text += `:${padZeros(value.getUTCMilliseconds(), 3)}`;
   return text;
 }

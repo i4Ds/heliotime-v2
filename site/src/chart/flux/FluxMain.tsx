@@ -4,7 +4,7 @@ import { toSuperScript } from '@/utils/super';
 import { AxisBottom, AxisLeft } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
-import { scaleLog, scaleTime } from '@visx/scale';
+import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line, LinePath } from '@visx/shape';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
@@ -46,7 +46,7 @@ export function FluxMain({
 
   const timeScale = useMemo(
     () =>
-      scaleTime({
+      scaleUtc({
         range: [0, width],
         domain: view === undefined ? timeExtent(data) : Array.from(view),
       }),
@@ -214,11 +214,14 @@ export function FluxMain({
       <AxisBottom
         top={height}
         scale={timeScale}
+        label="Universal Time"
         tickFormat={formatTime}
         numTicks={timeTicks}
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
         tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.xs, ...font.style }}
+        labelOffset={25}
+        labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
       />
       <AxisLeft
         scale={wattScale}

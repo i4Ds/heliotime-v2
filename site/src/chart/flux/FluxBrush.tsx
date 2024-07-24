@@ -1,7 +1,7 @@
 import { useStableDebouncedFlux } from '@/api/flux';
 import { AxisTop } from '@visx/axis';
 import { GridColumns } from '@visx/grid';
-import { scaleLog, scaleTime } from '@visx/scale';
+import { scaleLog, scaleUtc } from '@visx/scale';
 import { LinePath } from '@visx/shape';
 import { useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
@@ -33,7 +33,7 @@ export default function FluxBrush({
 
   const timeScale = useMemo(
     () =>
-      scaleTime({
+      scaleUtc({
         range: [0, width],
         domain: range,
       }),

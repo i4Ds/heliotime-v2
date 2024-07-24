@@ -14,7 +14,7 @@ function formatDate(date: Date): string {
   const minutes = doubleDigit(date.getUTCMinutes());
   const seconds = doubleDigit(date.getUTCSeconds());
 
-  return `${year}/${month}/${day} ${hours}:${minutes}:${seconds} UTC`;
+  return `${year}/${month}/${day} ${hours}:${minutes}:${seconds} UT`;
 }
 
 export interface HelioViewProps {

@@ -94,7 +94,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
               >
                 <FluxMain
                   width={width - mainLeftMargin}
-                  height={height - brushHeight - 40}
+                  height={height - brushHeight - 60}
                   left={mainLeftMargin}
                   view={view}
                   minSizeMs={MIN_VIEW_SIZE_MS}
