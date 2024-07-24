@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import Providers from './providers';
+import { font } from './theme';
 
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Heliotime - Interactive Timeline for GOES X-Ray Data',
@@ -20,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`overflow-x-hidden ${inter.className}`}>
+      <body className={`overflow-x-hidden ${font.className}`}>
         <Providers>{children}</Providers>
       </body>
     </html>

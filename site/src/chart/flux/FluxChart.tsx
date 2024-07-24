@@ -51,8 +51,8 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
   }, [dataRange, panFollowView, range, setView, shouldFollowStart, view]);
 
   return (
-    <div className={`flex flex-col ${className ?? ''}`}>
-      <div className="flex pb-2 gap-2 px-3">
+    <div className={`flex flex-col gap-2 ${className ?? ''}`}>
+      <div className="flex gap-2 px-3">
         {(
           [
             ['1H', 1 * 60 * 60 * 1000],
@@ -65,32 +65,22 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           .filter(([_, viewSize]) => range[1] - range[0] > viewSize)
           .map(([label, viewSize]) => (
-            <button
-              key={label}
-              // TODO: refactor to button tailwind class
-              className="px-2 py-1 rounded-md bg-blue-300"
-              type="button"
-              onClick={() => setFollowView(viewSize)}
-            >
+            <button key={label} type="button" onClick={() => setFollowView(viewSize)}>
               {label}
             </button>
           ))}
-        <button
-          className="px-2 py-1 rounded-md bg-blue-300"
-          type="button"
-          onClick={() => setView(range)}
-        >
+        <button type="button" onClick={() => setView(range)}>
           All
         </button>
         <button
-          className={`px-2 py-1 rounded-md ml-auto ${shouldFollowStart ? 'bg-blue-400' : 'bg-blue-300'}`}
+          className={`ml-auto ${shouldFollowStart ? 'btn-invert' : ''}`}
           type="button"
           onClick={() => panFollowView()}
         >
           -&gt;
         </button>
       </div>
-      <div className="flex-grow md:px-3">
+      <div className="flex-grow px-1 md:px-3">
         <ParentSize>
           {({ width, height }) => {
             const brushHeight = height * 0.15;

@@ -14,7 +14,9 @@ import { pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
-import { LINE_COLOR, View, formatTime, timeExtent, wattExtent } from './flux';
+import { colors, font, textSize } from '@/app/theme';
+import { curveMonotoneX } from '@visx/curve';
+import { View, formatTime, timeExtent, wattExtent } from './flux';
 import { PositionSizeProps } from '../base';
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
@@ -194,36 +196,48 @@ export function FluxMain({
           to={10 ** (-8 + index)}
           width={width}
           height={height}
-          fill={index % 2 ? '#e6e9ff' : '#d1d7ff'}
+          className={index % 2 ? 'fill-bg-0' : 'fill-bg'}
           label={'ABCMX'[index]}
           labelOffset={-20}
-          labelProps={{ textAnchor: 'end' }}
+          labelProps={{ textAnchor: 'end', className: 'fill-text' }}
         />
       ))}
-      <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke="#0002" />
+      <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
       <LinePath
+        curve={curveMonotoneX}
         data={data}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}
-        stroke={LINE_COLOR}
+        className="stroke-primary"
       />
-      <AxisBottom top={height} scale={timeScale} tickFormat={formatTime} numTicks={timeTicks} />
+      <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
+      <AxisBottom
+        top={height}
+        scale={timeScale}
+        tickFormat={formatTime}
+        numTicks={timeTicks}
+        stroke={colors.text.DEFAULT}
+        tickStroke={colors.text.DEFAULT}
+        tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.xs, ...font.style }}
+      />
       <AxisLeft
         scale={wattScale}
         label="X-ray Flux ( W/m² )"
-        labelProps={{ fontSize: 13 }}
-        labelOffset={40}
-        tickLabelProps={{ fontSize: 13 }}
         tickFormat={(v) => {
           const exponent = Math.log10(v.valueOf());
           if (exponent % 1 !== 0) return undefined;
           return `10${toSuperScript(exponent.toString())}`;
         }}
+        stroke={colors.text.DEFAULT}
+        tickStroke={colors.text.DEFAULT}
+        tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
+        labelOffset={42}
+        labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
       />
       {tooltipData && (
         <>
-          <Circle cx={tooltipLeft} cy={wattScale(tooltipData[1])} r={3} />
-          <Line y2={height} x1={tooltipLeft} x2={tooltipLeft} stroke="black" />
+          <Line y2={height} x1={tooltipLeft} x2={tooltipLeft} className="stroke-text" />
+          <Circle cx={tooltipLeft} cy={wattScale(tooltipData[1])} r={3} className="fill-text" />
           <TooltipInPortal
             top={tooltipTop}
             left={tooltipLeft}

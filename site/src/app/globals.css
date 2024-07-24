@@ -2,18 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
-/* TODO: implement styling */
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    @apply bg-bg shadow-bg text-text font-normal;
+  }
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  main {
+    @apply w-dvw h-dvh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply text-text-focus;
+  }
+
+  h1 {
+    @apply text-2xl;
+  }
+  h2 {
+    @apply text-xl;
+  }
+  h3 {
+    @apply text-lg;
+  }
+
+  button,
+  [type='button'],
+  [type='reset'],
+  [type='submit'] {
+    @apply btn;
+  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+@layer components {
+  .btn {
+    @apply bg-bg-1 hover:bg-bg-2 hover:text-text-focus active:bg-bg-0 active:text-text-dim text-center rounded-sm px-2 py-1;
+  }
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-tint hover:text-bg-1 active:bg-primary-shade active:text-bg text-bg;
+  }
+  .btn-invert {
+    @apply bg-text hover:bg-text-focus hover:text-bg-1 active:bg-text-dim active:text-bg text-bg;
   }
 }

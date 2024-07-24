@@ -5,6 +5,7 @@ import { localPoint } from '@visx/event';
 import { useVolatile, useVolatileState } from '@/utils/useVolatile';
 import { limitView } from '@/utils/panZoom';
 import { PointerStack } from '@/utils/pointer';
+import { Line } from '@visx/shape';
 import { PositionSizeProps } from './base';
 
 const TOUCH_EDGE_WIDTH = 15;
@@ -16,10 +17,9 @@ interface BrushHandelProps extends Omit<React.SVGProps<SVGRectElement>, 'fill' |
 }
 
 function BrushHandel({ x, height, isActive, ...rest }: BrushHandelProps) {
-  const strokeWidth = isActive ? 2 : 1;
   return (
     <>
-      <rect x={x - strokeWidth / 2} width={strokeWidth} height={height} />
+      <Line from={{x}} to={{x, y: height}} className={`stroke-text ${isActive ? 'stroke-2' : ''}`} />
       <rect
         // eslint-disable-next-line react/jsx-props-no-spreading
         {...rest}
@@ -165,7 +165,7 @@ export default function Brush({
             x={view[0]}
             width={view[1] - view[0]}
             height={height}
-            className="fill-blue-300 opacity-40 cursor-move"
+            className="fill-text opacity-10 cursor-move"
             onPointerDown={startAction(Move.BOTH)}
           />
           <BrushHandel

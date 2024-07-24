@@ -3,9 +3,6 @@ import { NumberRange } from '@/utils/range';
 import { NumberLike } from '@visx/scale';
 import { extent } from 'd3-array';
 
-// TODO: style properly
-export const LINE_COLOR = '#2582ec';
-
 export type View = Readonly<NumberRange>;
 
 export function timeExtent(navData: FluxSeries | undefined): NumberRange | undefined {

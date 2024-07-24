@@ -5,8 +5,10 @@ import { scaleLog, scaleTime } from '@visx/scale';
 import { LinePath } from '@visx/shape';
 import { useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
+import { colors, font, textSize } from '@/app/theme';
+import { curveMonotoneX } from '@visx/curve';
 import { PositionSizeProps } from '../base';
-import { LINE_COLOR, formatTime, wattExtent, View } from './flux';
+import { formatTime, wattExtent, View } from './flux';
 import Brush from '../Brush';
 
 export interface FluxBrushProps extends PositionSizeProps {
@@ -42,7 +44,7 @@ export default function FluxBrush({
     () =>
       scaleLog({
         // Don't go all the way down to prevent overlap with label
-        range: [height - 15, 0],
+        range: [height - 25, 0],
         domain: wattExtent(data),
         clamp: true,
       }),
@@ -55,20 +57,25 @@ export default function FluxBrush({
   }, [timeScale, view, width]);
   return (
     <svg width={width} height={height} y={top} x={left} className="overflow-visible">
-      <GridColumns scale={timeScale} height={height} numTicks={8} stroke="#0002" />
+      <GridColumns scale={timeScale} height={height} numTicks={8} stroke={colors.bg[1]} />
       <LinePath
+        curve={curveMonotoneX}
         data={data}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}
-        stroke={LINE_COLOR}
+        stroke={colors.primary.DEFAULT}
       />
+      <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
       <AxisTop
         top={height}
         scale={timeScale}
         tickFormat={formatTime}
         numTicks={8}
         hideTicks
-        tickLength={-3}
+        tickLength={0}
+        stroke={colors.text.DEFAULT}
+        tickStroke={colors.text.DEFAULT}
+        tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.xs, ...font.style }}
       />
       <Brush
         width={width}
