@@ -26,7 +26,9 @@ export async function fetchFluxSeries(
   if (to) params.set('end', new Date(Math.ceil(to)).toISOString());
   const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/flux?${params}`, { signal });
   if (!response.ok) throw new Error(`Fetch failed: ${response}`);
-  return response.json();
+  const json: FluxSeries = await response.json();
+  // Clamp min value because below 1e-9 we run into floating point issues
+  return json.map(([timestamp, watt]) => [timestamp, Math.max(watt, 1e-9)]);
 }
 
 export function selectFlux(series: FluxSeries, start?: number, end?: number): FluxSeries {

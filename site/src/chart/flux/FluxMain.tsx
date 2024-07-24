@@ -1,6 +1,5 @@
 import { FluxMeasurement, useStableDebouncedFlux } from '@/api/flux';
 import { HorizontalBand } from '@/chart/HorizontalBand';
-import { toSuperScript } from '@/utils/super';
 import { AxisBottom, AxisLeft } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
@@ -15,8 +14,9 @@ import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
 import { colors, font, textSize } from '@/app/theme';
-import { curveMonotoneX } from '@visx/curve';
-import { View, formatTime, timeExtent, wattExtent } from './flux';
+import { curveCatmullRom } from '@visx/curve';
+import { Text } from '@visx/text';
+import { View, formatTime, formatWatt, timeExtent, wattExtent } from './flux';
 import { PositionSizeProps } from '../base';
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
@@ -57,7 +57,7 @@ export function FluxMain({
     () =>
       scaleLog({
         range: [height, 0],
-        domain: wattExtent(data, 1.4),
+        domain: wattExtent(data, 0.1),
         clamp: true,
       }),
     [data, height]
@@ -198,13 +198,25 @@ export function FluxMain({
           height={height}
           className={index % 2 ? 'fill-bg-0' : 'fill-bg'}
           label={'ABCMX'[index]}
-          labelOffset={-20}
-          labelProps={{ textAnchor: 'end', className: 'fill-text' }}
+          labelOffset={width + 12}
+          labelProps={{ textAnchor: 'start', className: 'fill-text' }}
         />
       ))}
+      <Text
+        x={width+38}
+        y={height / 2}
+        verticalAnchor="end"
+        textAnchor="middle"
+        angle={90}
+        className="fill-text"
+        // eslint-disable-next-line react/jsx-props-no-spreading
+        {...textSize.sm}
+      >
+        Xray Flare Class
+      </Text>
       <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
       <LinePath
-        curve={curveMonotoneX}
+        curve={curveCatmullRom}
         data={data}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}
@@ -225,16 +237,12 @@ export function FluxMain({
       />
       <AxisLeft
         scale={wattScale}
-        label="X-ray Flux ( W/m² )"
-        tickFormat={(v) => {
-          const exponent = Math.log10(v.valueOf());
-          if (exponent % 1 !== 0) return undefined;
-          return `10${toSuperScript(exponent.toString())}`;
-        }}
+        label="Watts × m⁻²"
+        tickFormat={formatWatt}
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
         tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
-        labelOffset={42}
+        labelOffset={72}
         labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
       />
       {tooltipData && (

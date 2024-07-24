@@ -6,7 +6,7 @@ import { LinePath } from '@visx/shape';
 import { useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
 import { colors, font, textSize } from '@/app/theme';
-import { curveMonotoneX } from '@visx/curve';
+import { curveCatmullRom } from '@visx/curve';
 import { PositionSizeProps } from '../base';
 import { formatTime, wattExtent, View } from './flux';
 import Brush from '../Brush';
@@ -45,7 +45,7 @@ export default function FluxBrush({
       scaleLog({
         // Don't go all the way down to prevent overlap with label
         range: [height - 25, 0],
-        domain: wattExtent(data),
+        domain: wattExtent(data, 0.05),
         clamp: true,
       }),
     [height, data]
@@ -59,7 +59,7 @@ export default function FluxBrush({
     <svg width={width} height={height} y={top} x={left} className="overflow-visible">
       <GridColumns scale={timeScale} height={height} numTicks={8} stroke={colors.bg[1]} />
       <LinePath
-        curve={curveMonotoneX}
+        curve={curveCatmullRom}
         data={data}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}

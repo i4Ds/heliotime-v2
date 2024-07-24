@@ -85,7 +85,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
         <ParentSize>
           {({ width, height }) => {
             const brushHeight = height * 0.15;
-            const mainLeftMargin = 70;
+            const mainLeftMargin = 100;
             return (
               <svg
                 width={width}
@@ -94,7 +94,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
                 onContextMenuCapture={(event) => event.preventDefault()}
               >
                 <FluxMain
-                  width={width - mainLeftMargin}
+                  width={width - mainLeftMargin- 56}
                   height={height - brushHeight - 60}
                   left={mainLeftMargin}
                   view={view}
