@@ -32,11 +32,10 @@ export async function fetchFluxSeries(
 }
 
 export function selectFlux(series: FluxSeries, start?: number, end?: number): FluxSeries {
-  const firstInclusive = series.findIndex(
-    ([timestamp]) => start === undefined || start < timestamp
-  );
-  const lastInclusive = series.findLastIndex(([timestamp]) => end === undefined || timestamp < end);
-  return series.slice(firstInclusive, lastInclusive + 1);
+  const firstInclusive = start && series.findIndex(([timestamp]) => start < timestamp);
+  const lastExclusive = end && series.findLastIndex(([timestamp]) => timestamp < end) + 1;
+  if (firstInclusive === -1 || lastExclusive === -1) return [];
+  return series.slice(firstInclusive, lastExclusive);
 }
 
 export function useFluxRangeQuery() {
