@@ -110,7 +110,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
                   left={mainLeftMargin}
                   view={view}
                   minSizeMs={MIN_VIEW_SIZE_MS}
-                  setView={(setter) => setView((previous) => limitView(setter(previous), range))}
+                  setView={(setter) => setView((previous) => limitView(setter(previous), range, MIN_VIEW_SIZE_MS))}
                   onTimeSelect={onTimeSelect}
                 />
                 <FluxBrush

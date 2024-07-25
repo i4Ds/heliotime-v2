@@ -7,7 +7,7 @@ import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line, LinePath } from '@visx/shape';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
-import { Dispatch, useCallback, useMemo } from 'react';
+import { Dispatch, useCallback, useMemo, useState } from 'react';
 import { NumberRange } from '@/utils/range';
 import { pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
@@ -18,11 +18,16 @@ import { curveCatmullRom } from '@visx/curve';
 import { Text } from '@visx/text';
 import { View, formatTime, formatWatt, timeExtent, wattExtent } from './flux';
 import { PositionSizeProps } from '../base';
+import Brush, { BrushView } from '../Brush';
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
   return (
     lastPointA && lastPointB && Math.hypot(lastPointA.x - lastPointB.x, lastPointA.y - lastPointB.y)
   );
+}
+
+function shouldBrush(event: PointerEvent | React.PointerEvent): boolean {
+  return event.pointerType !== 'touch' && event.button !== 2;
 }
 
 interface FluxMainProps extends PositionSizeProps {
@@ -117,6 +122,7 @@ export function FluxMain({
   const stack = useMemo(() => new PointerStack<Point | undefined>(2), []);
   const handlePointerDown = useCallback(
     (event: React.PointerEvent) => {
+      if (shouldBrush(event)) return;
       const point = localPoint(event) ?? undefined;
       if (!stack.maybeAdd(event, point)) return;
       updateTooltip(stack.length < 2 ? point : undefined);
@@ -172,6 +178,8 @@ export function FluxMain({
     [hideTooltip, stack]
   );
 
+  const [zoomBrush, setZoomBrush] = useState<BrushView>(undefined);
+
   const timeTicks = width / 140;
   return (
     <svg
@@ -203,7 +211,7 @@ export function FluxMain({
         />
       ))}
       <Text
-        x={width+38}
+        x={width + 38}
         y={height / 2}
         verticalAnchor="end"
         textAnchor="middle"
@@ -259,8 +267,21 @@ export function FluxMain({
           </TooltipInPortal>
         </>
       )}
-      {/* Invisible rect to catch interaction events. */}
-      <rect width={width} height={height} fill="transparent" />
+      <Brush
+        width={width}
+        height={height}
+        view={zoomBrush}
+        pointerFilter={shouldBrush}
+        onBrush={setZoomBrush}
+        onBrushEnd={(zoomView) => {
+          setZoomBrush(undefined);
+          if (zoomView === undefined) return;
+          setView(() => [
+            timeScale.invert(zoomView[0]).getTime(),
+            timeScale.invert(zoomView[1]).getTime(),
+          ]);
+        }}
+      />
     </svg>
   );
 }

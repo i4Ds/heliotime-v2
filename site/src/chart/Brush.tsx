@@ -1,5 +1,5 @@
 import { NumberRange } from '@/utils/range';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useWindowEvent } from '@/utils/useWindowEvent';
 import { localPoint } from '@visx/event';
 import { useVolatile, useVolatileState } from '@/utils/useVolatile';
@@ -19,7 +19,11 @@ interface BrushHandelProps extends Omit<React.SVGProps<SVGRectElement>, 'fill' |
 function BrushHandel({ x, height, isActive, ...rest }: BrushHandelProps) {
   return (
     <>
-      <Line from={{x}} to={{x, y: height}} className={`stroke-text ${isActive ? 'stroke-2' : ''}`} />
+      <Line
+        from={{ x }}
+        to={{ x, y: height }}
+        className={`stroke-text ${isActive ? 'stroke-2' : ''}`}
+      />
       <rect
         // eslint-disable-next-line react/jsx-props-no-spreading
         {...rest}
@@ -56,7 +60,10 @@ type Action = Move | StartDraw;
 export interface BrushProps extends PositionSizeProps {
   view: BrushView;
   minSize?: number;
+  pointerFilter?: (event: PointerEvent) => boolean;
+  onBrushStart?: () => void;
   onBrush: (view: BrushView) => void;
+  onBrushEnd?: (view: BrushView) => void;
 }
 
 export default function Brush({
@@ -66,34 +73,36 @@ export default function Brush({
   left,
   view,
   minSize: rawMinSize = 0,
+  pointerFilter = () => true,
+  onBrushStart = () => {},
   onBrush,
+  onBrushEnd = () => {},
 }: BrushProps) {
   const minSize = Math.min(width, rawMinSize);
   const [renderAction, getAction, setAction] = useVolatileState<Action>();
   const [getVolatileView, setVolatileView, syncVolatileView] = useVolatile(view, onBrush);
   const stack = useMemo(() => new PointerStack<number>(1), []);
 
-  const startAction = useCallback(
-    (newMode: Move | StartDraw) => (event: React.PointerEvent) => {
-      if (!stack.maybeAdd(event, event.clientX)) return;
-      setAction(newMode);
-      syncVolatileView();
-    },
-    [setAction, stack, syncVolatileView]
-  );
+  const startAction = (newMode: Move | StartDraw) => (event: React.PointerEvent) => {
+    if (!pointerFilter(event.nativeEvent)) return;
+    if (!stack.maybeAdd(event, event.clientX)) return;
+    setAction(newMode);
+    syncVolatileView();
+    onBrushStart();
+  };
 
   useWindowEvent('pointermove', (event: PointerEvent) => {
+    const interaction = getAction();
+    const volatileView = getVolatileView();
+
+    // Handle idle
+    if (interaction === undefined) return;
+
     // Track mouse delta (event.movementX is discouraged)
     const lastX = stack.get(event);
     if (lastX === undefined) return;
     stack.maybeUpdate(event, event.clientX);
     let delta = event.clientX - lastX;
-
-    const volatileView = getVolatileView();
-    const interaction = getAction();
-
-    // Handle idle
-    if (interaction === undefined) return;
 
     // Handle start draw action
     if (interaction === START_DRAW) {
@@ -104,7 +113,8 @@ export default function Brush({
       setVolatileView(
         limitView(
           [point.x - (delta < 0 ? 0 : newSize), point.x + (delta > 0 ? 0 : newSize)],
-          [0, width]
+          [0, width],
+          minSize
         )
       );
       setAction(delta > 0 ? Move.RIGHT : Move.LEFT);
@@ -138,16 +148,14 @@ export default function Brush({
     setVolatileView(newView);
   });
 
-  const endAction = useCallback(
-    (event: PointerEvent) => {
-      if (!stack.maybeRemove(event)) return;
-      const interaction = getAction();
-      if (interaction === undefined) return;
-      if (interaction === START_DRAW) setVolatileView(undefined);
-      setAction(undefined);
-    },
-    [getAction, setAction, setVolatileView, stack]
-  );
+  const endAction = (event: PointerEvent) => {
+    if (!stack.maybeRemove(event)) return;
+    const interaction = getAction();
+    if (interaction === undefined) return;
+    if (interaction === START_DRAW) setVolatileView(undefined);
+    setAction(undefined);
+    onBrushEnd(getVolatileView());
+  };
   useWindowEvent('pointerup', endAction);
   useWindowEvent('pointercancel', endAction);
 
