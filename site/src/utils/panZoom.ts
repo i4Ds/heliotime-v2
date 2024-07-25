@@ -2,11 +2,12 @@ import { NumberRange } from './range';
 
 export function limitView(
   [start, end]: Readonly<NumberRange>,
-  [min, max]: Readonly<NumberRange>,
+  [min, max]: Partial<Readonly<NumberRange>> = [],
   minSize = 0
 ): Readonly<NumberRange> {
   const size = end - start;
-  if (size > max - min) return [Math.max(start, min), Math.min(end, max)];
+  if (min !== undefined && max !== undefined && size > max - min)
+    return [Math.max(start, min), Math.min(end, max)];
   if (size < minSize) {
     const extension = (minSize - size) / 2;
     // eslint-disable-next-line no-param-reassign
@@ -14,8 +15,8 @@ export function limitView(
     // eslint-disable-next-line no-param-reassign
     end += extension;
   }
-  if (start < min) return [min, end + (min - start)];
-  if (max < end) return [start - (end - max), max];
+  if (min !== undefined && start < min) return [min, end + (min - start)];
+  if (max !== undefined && max < end) return [start - (end - max), max];
   return [start, end];
 }
 
