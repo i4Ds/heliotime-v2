@@ -7,7 +7,7 @@ import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line, LinePath } from '@visx/shape';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
-import { Dispatch, useCallback, useMemo, useState } from 'react';
+import { Dispatch, useCallback, useEffect, useMemo, useState } from 'react';
 import { NumberRange } from '@/utils/range';
 import { pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
@@ -71,25 +71,23 @@ export function FluxMain({
   const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
     useTooltip<FluxMeasurement>();
   const { containerRef, TooltipInPortal } = useTooltipInPortal();
-  const updateTooltip = useCallback(
-    (point?: Point) => {
-      if (point === undefined || data.length === 0) {
-        hideTooltip();
-        return;
-      }
-      const index = bisector<FluxMeasurement, number>((m) => m[0]).center(
-        data,
-        timeScale.invert(point.x).getTime()
-      );
-      const measurement = data[index];
-      showTooltip({
-        tooltipData: measurement,
-        tooltipLeft: timeScale(measurement[0]),
-        tooltipTop: point.y,
-      });
-    },
-    [data, hideTooltip, showTooltip, timeScale]
-  );
+  const [tooltipPoint, setTooltipPoint] = useState<Point | undefined>();
+  useEffect(() => {
+    if (tooltipPoint === undefined || data.length === 0) {
+      hideTooltip();
+      return;
+    }
+    const index = bisector<FluxMeasurement, number>((m) => m[0]).center(
+      data,
+      timeScale.invert(tooltipPoint.x).getTime()
+    );
+    const measurement = data[index];
+    showTooltip({
+      tooltipData: measurement,
+      tooltipLeft: timeScale(measurement[0]),
+      tooltipTop: tooltipPoint.y,
+    });
+  }, [data, hideTooltip, showTooltip, timeScale, tooltipPoint])
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGElement>) => {
@@ -125,16 +123,18 @@ export function FluxMain({
       if (shouldBrush(event)) return;
       const point = localPoint(event) ?? undefined;
       if (!stack.maybeAdd(event, point)) return;
-      updateTooltip(stack.length < 2 ? point : undefined);
+      setTooltipPoint(stack.length < 2 ? point : undefined);
     },
-    [stack, updateTooltip]
+    [stack]
   );
   useWindowEvent('pointermove', (event) => {
     if (stack.length === 0 || !stack.has(event)) return;
 
     // Show tooltip if there is only one pointer
+    // TODO: specify relative to container to avoid misalignment
+    //    if pointer is moved out of chart
     const point = localPoint(event) ?? undefined;
-    if (stack.length === 1) updateTooltip(point);
+    if (stack.length === 1) setTooltipPoint(point);
 
     // Get and update points
     const [lastPointA, lastPointB] = stack.getAll();
@@ -166,16 +166,16 @@ export function FluxMain({
   const handleHover = useCallback(
     (event: React.PointerEvent) => {
       if (stack.length > 0) return;
-      updateTooltip(localPoint(event) ?? undefined);
+      setTooltipPoint(localPoint(event) ?? undefined);
     },
-    [stack, updateTooltip]
+    [stack]
   );
   const handleHoverEnd = useCallback(
     (event: React.PointerEvent) => {
       if (stack.length > 0 || event.pointerType !== 'mouse') return;
-      hideTooltip();
+      setTooltipPoint(undefined);
     },
-    [hideTooltip, stack]
+    [stack]
   );
 
   const [zoomBrush, setZoomBrush] = useState<BrushView>(undefined);
