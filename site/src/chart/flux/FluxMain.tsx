@@ -7,7 +7,7 @@ import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line, LinePath } from '@visx/shape';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
-import { Dispatch, useCallback, useEffect, useMemo, useState } from 'react';
+import { Dispatch, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NumberRange } from '@/utils/range';
 import { pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
@@ -86,7 +86,7 @@ export function FluxMain({
 
   const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
     useTooltip<FluxMeasurement>();
-  const { containerRef, TooltipInPortal } = useTooltipInPortal();
+  const { containerRef: tooltipContainerRef, TooltipInPortal } = useTooltipInPortal();
   const [tooltipPoint, setTooltipPoint] = useState<Point | undefined>();
   useEffect(() => {
     if (tooltipPoint === undefined || data.length === 0) {
@@ -133,6 +133,7 @@ export function FluxMain({
   );
 
   // Handle drag interactions
+  const containerRef = useRef<SVGSVGElement>(null);
   const stack = useMemo(() => new PointerStack<Point | undefined>(2), []);
   const handlePointerDown = useCallback(
     (event: React.PointerEvent) => {
@@ -147,9 +148,7 @@ export function FluxMain({
     if (stack.length === 0 || !stack.has(event)) return;
 
     // Show tooltip if there is only one pointer
-    // TODO: specify relative to container to avoid misalignment
-    //    if pointer is moved out of chart
-    const point = localPoint(event) ?? undefined;
+    const point = localPoint(containerRef.current, event) ?? undefined;
     if (stack.length === 1) setTooltipPoint(point);
 
     // Get and update points
@@ -212,6 +211,8 @@ export function FluxMain({
       onWheel={handleWheel}
       className="overflow-visible"
     >
+      {/* Needs to reference child because of how use-measure works. */}
+      <g ref={tooltipContainerRef}/>
       {[0, 1, 2, 3, 4].map((index) => (
         <HorizontalBand
           key={index}
