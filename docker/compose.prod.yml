@@ -6,3 +6,5 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:?Database password not specified}
+  site:
+    restart: unless-stopped
