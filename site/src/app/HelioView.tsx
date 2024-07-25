@@ -1,6 +1,6 @@
 import { getHelioviewerUrl, getSolarImageUrl } from '@/api/helioviewer';
 import Image from 'next/image';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const viewActionText = 'View on Helioviewer';
 
@@ -24,6 +24,8 @@ export interface HelioViewProps {
 
 export default function HelioView({ timestamp, className = '' }: HelioViewProps) {
   const viewerUrl = useMemo(() => getHelioviewerUrl(timestamp), [timestamp]);
+  const [isLoading, setIsLoading] = useState(false);
+  useEffect(() => setIsLoading(true), [timestamp]);
   return (
     <div className={`flex flex-col justify-center items-center gap-2 ${className}`}>
       <h1>Helioviewer Preview</h1>
@@ -38,12 +40,20 @@ export default function HelioView({ timestamp, className = '' }: HelioViewProps)
           src="_" // Required but useless
           loader={({ width }) => getSolarImageUrl(timestamp, width)}
           alt="Sun imaged by SDO"
-          fill
           priority
+          fill
+          sizes='30dvh'
+          onLoad={() => setIsLoading(false)}
+          onError={() => setIsLoading(false)}
         />
         <div className="absolute w-full px-2 bottom-1 text-center text-xs text-text-dim">
           Imaged by SDO at {formatDate(timestamp)}
         </div>
+        {isLoading && (
+          <div className="absolute size-full flex items-center justify-center backdrop-blur-sm bg-bg bg-opacity-20">
+            Loading ...
+          </div>
+        )}
       </a>
       <a className="btn btn-primary" href={viewerUrl} target="_blank" rel="noopener">
         {viewActionText}
