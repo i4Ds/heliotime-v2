@@ -82,6 +82,7 @@ export default function FluxBrush({
         height={height}
         view={brushView}
         minSize={timeScale(range[0] + minSizeMs)}
+        allowOverflow
         onBrush={(newView) =>
           onBrush(
             newView === undefined

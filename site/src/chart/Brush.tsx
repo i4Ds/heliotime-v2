@@ -60,6 +60,7 @@ type Action = Move | StartDraw;
 export interface BrushProps extends PositionSizeProps {
   view: BrushView;
   minSize?: number;
+  allowOverflow?: boolean;
   pointerFilter?: (event: PointerEvent) => boolean;
   onBrushStart?: () => void;
   onBrush: (view: BrushView) => void;
@@ -73,6 +74,7 @@ export default function Brush({
   left,
   view,
   minSize: rawMinSize = 0,
+  allowOverflow = false,
   pointerFilter = () => true,
   onBrushStart = () => {},
   onBrush,
@@ -113,7 +115,7 @@ export default function Brush({
       setVolatileView(
         limitView(
           [point.x - (delta < 0 ? 0 : newSize), point.x + (delta > 0 ? 0 : newSize)],
-          [0, width],
+          allowOverflow ? undefined : [0, width],
           minSize
         )
       );
@@ -124,13 +126,14 @@ export default function Brush({
     // Handle move action
     if (delta === 0 || volatileView === undefined) return;
     // Prevent movement beyond border
-    if (delta < 0)
-      delta = Math.max(-(interaction.left ? volatileView[0] : volatileView[1] - minSize), delta);
-    else if (delta > 0)
-      delta = Math.min(
-        width - (interaction.right ? volatileView[1] : volatileView[0] + minSize),
-        delta
-      );
+    if (!allowOverflow)
+      if (delta < 0)
+        delta = Math.max(-(interaction.left ? volatileView[0] : volatileView[1] - minSize), delta);
+      else if (delta > 0)
+        delta = Math.min(
+          width - (interaction.right ? volatileView[1] : volatileView[0] + minSize),
+          delta
+        );
     // Create updated view
     let newView: BrushView = [
       volatileView[0] + (interaction.left ? delta : 0),
@@ -160,7 +163,7 @@ export default function Brush({
   useWindowEvent('pointercancel', endAction);
 
   return (
-    <svg x={top} y={left} width={width} height={height} className="overflow-visible">
+    <svg x={top} y={left} width={width} height={height}>
       <rect
         width={width}
         height={height}
