@@ -8,7 +8,7 @@ import { NumberRange } from '@/utils/range';
 import { colors, font, textSize } from '@/app/theme';
 import { curveCatmullRom } from '@visx/curve';
 import { PositionSizeProps } from '../base';
-import { formatTime, wattExtent, View } from './flux';
+import { wattExtent, View, formatTimeOnlyDate } from './flux';
 import Brush from '../Brush';
 
 export interface FluxBrushProps extends PositionSizeProps {
@@ -69,7 +69,7 @@ export default function FluxBrush({
       <AxisTop
         top={height}
         scale={timeScale}
-        tickFormat={formatTime}
+        tickFormat={formatTimeOnlyDate}
         numTicks={8}
         hideTicks
         tickLength={0}

@@ -30,19 +30,33 @@ function padZeros(value: number, digits = 2): string {
   return value.toFixed(0).padStart(digits, '0');
 }
 
-export const formatTime: TickFormatter<Date | NumberLike> = (value) => {
-  if (!(value instanceof Date)) return undefined;
-  if (value.getTime() === new Date(value).setUTCHours(0, 0, 0, 0)) {
-    let text = padZeros(value.getUTCFullYear(), 4);
-    if (value.getUTCMonth() !== 0 || value.getUTCDate() !== 1)
-      text += `-${padZeros(value.getUTCMonth() + 1)}`;
-    if (value.getUTCDate() !== 1) text += `-${padZeros(value.getUTCDate())}`;
-    return text;
-  }
-  let text = `${padZeros(value.getUTCHours())}:${padZeros(value.getUTCMinutes())}`;
-  if (value.getUTCSeconds() !== 0) text += `:${padZeros(value.getUTCSeconds())}`;
-  if (value.getUTCMilliseconds() !== 0) text += `:${padZeros(value.getUTCMilliseconds(), 3)}`;
+function formatDate(value: Date, intervalMs: number): string | undefined {
+  if (value.getTime() !== new Date(value).setUTCHours(0, 0, 0, 0)) return undefined;
+  let text = padZeros(value.getUTCFullYear(), 4);
+  if (intervalMs < 364 * 24 * 60 * 60 * 1000) text += `-${padZeros(value.getUTCMonth() + 1)}`;
+  if (intervalMs < 27 * 24 * 60 * 60 * 1000) text += `-${padZeros(value.getUTCDate())}`;
   return text;
+}
+
+export const formatTime: TickFormatter<Date | NumberLike> = (value, index, values) => {
+  if (!(value instanceof Date)) return undefined;
+  const intervalMs = (values[1] ?? values[0]).value.valueOf() - values[0].value.valueOf();
+
+  let timeText: string | undefined;
+  if (intervalMs < 24 * 60 * 60 * 1000) {
+    timeText = `${padZeros(value.getUTCHours())}:${padZeros(value.getUTCMinutes())}`;
+    if (intervalMs < 60 * 1000) timeText += `:${padZeros(value.getUTCSeconds())}`;
+    if (intervalMs < 1000) timeText += `:${padZeros(value.getUTCMilliseconds(), 3)}`;
+  }
+
+  const dateText = formatDate(value, intervalMs);
+  return timeText && dateText ? `${timeText} ${dateText}` : (timeText ?? dateText);
+};
+
+export const formatTimeOnlyDate: TickFormatter<Date | NumberLike> = (value, index, values) => {
+  if (!(value instanceof Date)) return undefined;
+  const intervalMs = (values[1] ?? values[0]).value.valueOf() - values[0].value.valueOf();
+  return formatDate(value, intervalMs);
 };
 
 export const formatWatt: TickFormatter<NumberLike> = (value, index, values) => {

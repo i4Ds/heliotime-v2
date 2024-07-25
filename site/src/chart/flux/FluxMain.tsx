@@ -1,6 +1,6 @@
 import { FluxMeasurement, useStableDebouncedFlux } from '@/api/flux';
 import { HorizontalBand } from '@/chart/HorizontalBand';
-import { AxisBottom, AxisLeft } from '@visx/axis';
+import { AxisBottom, AxisLeft, TickRendererProps } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
@@ -28,6 +28,22 @@ function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefin
 
 function shouldBrush(event: PointerEvent | React.PointerEvent): boolean {
   return event.pointerType !== 'touch' && event.button !== 2;
+}
+
+function FluxTimeTickLabel({ y, formattedValue, ...rest }: TickRendererProps) {
+  return formattedValue?.split(' ').map((line, index) => (
+    <Text
+      // eslint-disable-next-line react/jsx-props-no-spreading
+      {...rest}
+      key={line}
+      y={y + 16 * index}
+      fill={colors.text.DEFAULT}
+      // eslint-disable-next-line react/jsx-props-no-spreading
+      {...textSize.xs}
+    >
+      {line}
+    </Text>
+  ));
 }
 
 interface FluxMainProps extends PositionSizeProps {
@@ -87,7 +103,7 @@ export function FluxMain({
       tooltipLeft: timeScale(measurement[0]),
       tooltipTop: tooltipPoint.y,
     });
-  }, [data, hideTooltip, showTooltip, timeScale, tooltipPoint])
+  }, [data, hideTooltip, showTooltip, timeScale, tooltipPoint]);
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGElement>) => {
@@ -180,7 +196,7 @@ export function FluxMain({
 
   const [zoomBrush, setZoomBrush] = useState<BrushView>(undefined);
 
-  const timeTicks = width / 140;
+  const timeTicks = Math.max(width / 160, 2);
   return (
     <svg
       ref={containerRef}
@@ -236,11 +252,11 @@ export function FluxMain({
         scale={timeScale}
         label="Universal Time"
         tickFormat={formatTime}
+        tickComponent={FluxTimeTickLabel}
         numTicks={timeTicks}
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
-        tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.xs, ...font.style }}
-        labelOffset={25}
+        labelOffset={40}
         labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
       />
       <AxisLeft

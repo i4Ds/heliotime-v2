@@ -140,8 +140,8 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
           onContextMenuCapture={(event) => event.preventDefault()}
         >
           <FluxMain
-            width={width - mainLeftMargin - 56}
-            height={height - brushHeight - 60}
+            width={width - mainLeftMargin - 55}
+            height={height - brushHeight - 75}
             left={mainLeftMargin}
             view={renderView}
             minSizeMs={MIN_VIEW_SIZE_MS}
