@@ -145,7 +145,7 @@ export function FluxMain({
     [stack]
   );
   useWindowEvent('pointermove', (event) => {
-    if (stack.length === 0 || !stack.has(event)) return;
+    if (containerRef.current === null || stack.length === 0 || !stack.has(event)) return;
 
     // Show tooltip if there is only one pointer
     const point = localPoint(containerRef.current, event) ?? undefined;
@@ -212,7 +212,7 @@ export function FluxMain({
       className="overflow-visible"
     >
       {/* Needs to reference child because of how use-measure works. */}
-      <g ref={tooltipContainerRef}/>
+      <g ref={tooltipContainerRef} />
       {[0, 1, 2, 3, 4].map((index) => (
         <HorizontalBand
           key={index}
