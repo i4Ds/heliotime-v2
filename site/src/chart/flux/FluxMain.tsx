@@ -14,7 +14,7 @@ import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
 import { colors, font, textSize } from '@/app/theme';
-import { curveCatmullRom } from '@visx/curve';
+import { curveMonotoneX } from '@visx/curve';
 import { Text } from '@visx/text';
 import { View, formatTime, formatWatt, timeExtent, wattExtent } from './flux';
 import { PositionSizeProps } from '../base';
@@ -241,7 +241,7 @@ export function FluxMain({
       </Text>
       <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
       <LinePath
-        curve={curveCatmullRom}
+        curve={curveMonotoneX}
         data={data}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}

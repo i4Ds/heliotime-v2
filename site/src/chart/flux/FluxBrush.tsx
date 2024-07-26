@@ -6,7 +6,7 @@ import { LinePath } from '@visx/shape';
 import { useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
 import { colors, font, textSize } from '@/app/theme';
-import { curveCatmullRom } from '@visx/curve';
+import { curveMonotoneX } from '@visx/curve';
 import { PositionSizeProps } from '../base';
 import { wattExtent, View, formatTimeOnlyDate } from './flux';
 import Brush from '../Brush';
@@ -59,7 +59,7 @@ export default function FluxBrush({
     <svg width={width} height={height} y={top} x={left} className="overflow-visible">
       <GridColumns scale={timeScale} height={height} numTicks={8} stroke={colors.bg[1]} />
       <LinePath
-        curve={curveCatmullRom}
+        curve={curveMonotoneX}
         data={data}
         x={(d) => timeScale(d[0])}
         y={(d) => wattScale(d[1])}
