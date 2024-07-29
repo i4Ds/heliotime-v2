@@ -38,7 +38,7 @@ def _pick_abs_max(series_a: pd.Series, series_b: pd.Series) -> pd.Series:
 # Centered window size used for smoothing noisy measurements.
 SMOOTHING_WINDOW = timedelta(minutes=5)
 # Centered windows size of how long the shortest flare would be.
-SUSTAINED_MOTION_WINDOW = timedelta(seconds=20)
+SUSTAINED_MOTION_WINDOW = timedelta(seconds=40)
 
 
 def _denoise(log_flux: pd.Series) -> pd.Series:
@@ -47,7 +47,7 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     sustained = log_flux.rolling(SUSTAINED_MOTION_WINDOW, center=True).mean()
 
     # Mask already smooth parts
-    is_rough = (sustained - log_flux).abs() > 0.005
+    is_rough = (sustained - log_flux).abs() > 0.004
 
     # Mark valid slopes to not smooth out solar flares.
     # If a big change is actually a flare, it will reside for at least a few seconds
@@ -61,7 +61,7 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     sustained_velocity_max = _change_speed(sustained).abs() \
         .rolling(SUSTAINED_MOTION_WINDOW, center=True).sum() \
         .rolling(SMOOTHING_WINDOW, center=True).max()
-    is_valid_slope = (sustained_velocity_max / rough_velocity_max) > 0.35
+    is_valid_slope = (sustained_velocity_max / rough_velocity_max) > 0.45
 
     # Combine and smooth out all flags to not create hard edges
     is_valid_slope_nearby = is_valid_slope.rolling(SUSTAINED_MOTION_WINDOW, center=True).mean()
@@ -79,12 +79,17 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     max_correction = _top_percentile(corrections_without_nan, percentage=0.01)
     min_correction = -_top_percentile(-corrections_without_nan, percentage=0.01)
     corrections = corrections.clip(
-        upper=min(max_correction + 0.05, 0.8),
-        lower=max(min_correction - 0.05, -0.8)
+        upper=min(max_correction + 0.1, 0.8),
+        lower=max(min_correction - 0.1, -0.8)
     )
 
     # Apply corrections
     return log_flux + corrections
+
+
+# How fast the flux trend changes.
+# Should be bigger than a flare but still catch up with longer term changes.
+_FLUX_TREND_PACE = timedelta(hours=12)
 
 
 def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
@@ -101,22 +106,23 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     abs_velocity = _pick_abs_max(backward_velocity, forward_velocity)
     abs_acceleration = _pick_abs_max(backward_acceleration, forward_acceleration)
 
-    # Mark measurements that introduce excessive acceleration.
-    is_outlier = abs_acceleration > 0.02
+    # Mark measurements that introduce high acceleration.
+    has_high_acceleration = abs_acceleration > 0.01
+    has_excessive_acceleration = abs_acceleration > 0.02
     # Mark measurements after a large time gaps for splitting.
-    is_after_gap = cast(pd.Series, log_flux).index.diff() > timedelta(seconds=30)
+    is_after_gap = cast(pd.Series, log_flux).index.diff() > timedelta(minutes=1)
     # Remove outliers and split at marked
-    group_id = (is_outlier | is_after_gap).cumsum()[~is_outlier]
-    log_groups = log_flux[~is_outlier].groupby(group_id)
+    group_id = (has_high_acceleration | is_after_gap).cumsum()[~has_excessive_acceleration]
+    log_groups = log_flux[~has_excessive_acceleration].groupby(group_id)
 
     # Filter leftover groups
     filtered_log_groups = deque()
     for _, log_group in log_groups:
         if (
-                # Filter flat groups (probably the satellite's value border)
-                log_group.rolling(timedelta(minutes=30), center=True).std().min() < 0.001 or
                 # Filter short groups
                 log_group.index[-1] - log_group.index[0] < timedelta(minutes=2) or
+                # Filter flat groups (probably the satellite's value border)
+                log_group.rolling(timedelta(minutes=30), center=True).std().median() < 0.0001 or
                 # Filter out unnaturally fast changing groups (likely leftover outlier spots)
                 abs_velocity.loc[log_group.index].mean() > 0.005
 
@@ -127,22 +133,53 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     if len(log_groups) == 0:
         return None
 
-    # Filter outlier groups based on Z-Score.
-    # Is done after all other filters have been applied because
-    # the mean and std should be as clean as possible.
+    # Filter outlier groups
+    if len(log_groups) == 1:
+        # Outlier detection on a single group doesn't make sense
+        return log_groups[0]
+    # Calculate minimum measurements count before moving average is taken as reference
+    points_per_second = len(log_flux) / (log_flux.index[-1] - log_flux.index[0]).total_seconds()
+    min_measurements = 4 * 60 * 60 * points_per_second
+    # Calculate bidirectional moving average
     log_flux = pd.concat(log_groups)
-    log_mean = log_flux.mean()
-    log_std = log_flux.std()
+    log_mean_forward = log_flux.rolling(_FLUX_TREND_PACE).mean()
+    log_mean_backward = log_flux[::-1].rolling(_FLUX_TREND_PACE).mean()[::-1]
+    # Calculate standard deviation.
+    # Both are always nearly identical so just take the min.
+    log_std = max(min(
+        (log_flux - log_mean_forward).std(),
+        (log_flux - log_mean_backward).std()
+    ), 0.2)
+    # Filter based on Z-Score
     filtered_log_groups = deque()
     for log_group in log_groups:
-        # Select closest point to mean to compute Z-Score to avoid
-        # throwing out correct spikes that go back down again.
-        lowest_zscore = min(
-            np.abs(log_group.max() - log_mean),
-            np.abs(log_group.mean() - log_mean),
-            np.abs(log_group.min() - log_mean),
-        ) / log_std
-        if np.abs(lowest_zscore) > 3:
+        # Get previous and next mean as unaffected references
+        start_index = log_flux.index.get_loc(log_group.index[0])
+        end_index = log_flux.index.get_loc(log_group.index[-1])
+        last_log_mean = log_mean_forward.iloc[max(start_index - 1, 0)]
+        next_log_mean = log_mean_backward.iloc[min(end_index + 1, len(log_mean_backward) - 1)]
+
+        # Take mean of other side if one side isn't based on enough measurements.
+        # If both sides don't use enough points, we keep them as is.
+        last_enough_measurements = min_measurements < start_index
+        next_enough_measurements = end_index < len(log_mean_backward) - min_measurements - 1
+        if last_enough_measurements or next_enough_measurements:
+            if not last_enough_measurements:
+                last_log_mean = next_log_mean
+            if not next_enough_measurements:
+                next_log_mean = last_log_mean
+
+        # Calculate Z-Score at start and end
+        zscore_start = (log_group.iloc[0] - last_log_mean) / log_std
+        zscore_end = (log_group.iloc[-1] - next_log_mean) / log_std
+        min_abs_zscore = min(abs(zscore_start), abs(zscore_end))
+
+        # If one score is negative and the other positive
+        # the group start over the mean and ends under it over vice versa.
+        doesnt_crosses_mean = np.sign(zscore_start) == np.sign(zscore_end)
+
+        # Filter outlier groups is way above or below
+        if doesnt_crosses_mean and min_abs_zscore > 3:
             continue
         filtered_log_groups.append(log_group)
     log_groups = filtered_log_groups
