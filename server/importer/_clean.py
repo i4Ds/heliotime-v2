@@ -8,17 +8,6 @@ import pandas as pd
 from data.flux import Flux, empty_flux
 
 
-def _top_percentile(series: pd.Series, percentage: float) -> float:
-    """
-    :return: The value at nth percentile of the series. Median would be 0.5.
-    """
-    if series.empty:
-        return np.NAN
-    trim_size = round(len(series) * percentage)
-    max_partition = np.argpartition(series.to_numpy(), -trim_size)
-    return series.iloc[max_partition[-trim_size]]
-
-
 def _change_speed(series: pd.Series, periods=1) -> pd.Series:
     """
     series.diff() for timeseries.
@@ -36,15 +25,15 @@ def _pick_abs_max(series_a: pd.Series, series_b: pd.Series) -> pd.Series:
 
 
 # Centered window size used for smoothing noisy measurements.
-SMOOTHING_WINDOW = timedelta(minutes=5)
+_SMOOTHING_WINDOW = timedelta(minutes=5)
 # Centered windows size of how long the shortest flare would be.
-SUSTAINED_MOTION_WINDOW = timedelta(seconds=40)
+_SUSTAINED_MOTION_WINDOW = timedelta(seconds=40)
 
 
 def _denoise(log_flux: pd.Series) -> pd.Series:
     # Smooth out possible noise while keeping any actual motion.
     # Used to detect certain regions later.
-    sustained = log_flux.rolling(SUSTAINED_MOTION_WINDOW, center=True).mean()
+    sustained = log_flux.rolling(_SUSTAINED_MOTION_WINDOW, center=True).mean()
 
     # Mask already smooth parts
     is_rough = (sustained - log_flux).abs() > 0.004
@@ -56,28 +45,27 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     # Take max as the big velocities are only at the edges of the flare,
     # and we don't want to smooth the tops.
     rough_velocity_max = _change_speed(log_flux).abs() \
-        .rolling(SUSTAINED_MOTION_WINDOW, center=True).sum() \
-        .rolling(SMOOTHING_WINDOW, center=True).max()
+        .rolling(_SUSTAINED_MOTION_WINDOW, center=True).sum() \
+        .rolling(_SMOOTHING_WINDOW, center=True).max()
     sustained_velocity_max = _change_speed(sustained).abs() \
-        .rolling(SUSTAINED_MOTION_WINDOW, center=True).sum() \
-        .rolling(SMOOTHING_WINDOW, center=True).max()
+        .rolling(_SUSTAINED_MOTION_WINDOW, center=True).sum() \
+        .rolling(_SMOOTHING_WINDOW, center=True).max()
     is_valid_slope = (sustained_velocity_max / rough_velocity_max) > 0.45
 
     # Combine and smooth out all flags to not create hard edges
-    is_valid_slope_nearby = is_valid_slope.rolling(SUSTAINED_MOTION_WINDOW, center=True).mean()
+    is_valid_slope_nearby = is_valid_slope.rolling(_SUSTAINED_MOTION_WINDOW, center=True).mean()
     # If 20% nearby is rough, smooth also this point.
-    is_rough_nearby = (is_rough.rolling(SMOOTHING_WINDOW, center=True).mean() / 0.2).clip(upper=1)
+    is_rough_nearby = (is_rough.rolling(_SMOOTHING_WINDOW, center=True).mean() / 0.2).clip(upper=1)
     smooth_force = pd.concat((1 - is_valid_slope_nearby, is_rough_nearby), axis=1, ).min(axis=1)
 
     # Calculate smoothing corrections
-    smooth = log_flux.rolling(SMOOTHING_WINDOW, center=True).mean()
+    smooth = log_flux.rolling(_SMOOTHING_WINDOW, center=True).mean()
     corrections = (smooth - log_flux) * smooth_force
 
     # Clip corrections as excessive corrections only smooth out
     # outlier spikes making them harder to detect later.
-    corrections_without_nan = corrections.dropna()
-    max_correction = _top_percentile(corrections_without_nan, percentage=0.01)
-    min_correction = -_top_percentile(-corrections_without_nan, percentage=0.01)
+    max_correction = np.nanpercentile(corrections, 99)
+    min_correction = np.nanpercentile(corrections, 1)
     corrections = corrections.clip(
         upper=min(max_correction + 0.1, 0.8),
         lower=max(min_correction - 0.1, -0.8)
@@ -108,7 +96,7 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
 
     # Mark measurements that introduce high acceleration.
     has_high_acceleration = abs_acceleration > 0.01
-    has_excessive_acceleration = abs_acceleration > 0.02
+    has_excessive_acceleration = abs_acceleration > 0.04
     # Mark measurements after a large time gaps for splitting.
     is_after_gap = cast(pd.Series, log_flux).index.diff() > timedelta(minutes=1)
     # Remove outliers and split at marked
@@ -120,7 +108,7 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     for _, log_group in log_groups:
         if (
                 # Filter short groups
-                log_group.index[-1] - log_group.index[0] < timedelta(minutes=2) or
+                log_group.index[-1] - log_group.index[0] < timedelta(minutes=1) or
                 # Filter flat groups (probably the satellite's value border)
                 log_group.rolling(timedelta(minutes=30), center=True).std().median() < 0.0001 or
                 # Filter out unnaturally fast changing groups (likely leftover outlier spots)
@@ -153,16 +141,21 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     # Filter based on Z-Score
     filtered_log_groups = deque()
     for log_group in log_groups:
+        start_date = log_group.index[0]
+        end_date = log_group.index[-1]
+        start_index = log_flux.index.get_loc(start_date)
+        end_index = log_flux.index.get_loc(end_date)
+
         # Get previous and next mean as unaffected references
-        start_index = log_flux.index.get_loc(log_group.index[0])
-        end_index = log_flux.index.get_loc(log_group.index[-1])
         last_log_mean = log_mean_forward.iloc[max(start_index - 1, 0)]
         next_log_mean = log_mean_backward.iloc[min(end_index + 1, len(log_mean_backward) - 1)]
 
         # Take mean of other side if one side isn't based on enough measurements.
         # If both sides don't use enough points, we keep them as is.
-        last_enough_measurements = min_measurements < start_index
-        next_enough_measurements = end_index < len(log_mean_backward) - min_measurements - 1
+        last_enough_measurements = min_measurements < start_index - log_flux.index.searchsorted(
+            start_date - _FLUX_TREND_PACE)
+        next_enough_measurements = min_measurements < log_flux.index.searchsorted(
+            end_date + _FLUX_TREND_PACE, side='right') - end_index
         if last_enough_measurements or next_enough_measurements:
             if not last_enough_measurements:
                 last_log_mean = next_log_mean
@@ -172,7 +165,12 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
         # Calculate Z-Score at start and end
         zscore_start = (log_group.iloc[0] - last_log_mean) / log_std
         zscore_end = (log_group.iloc[-1] - next_log_mean) / log_std
-        min_abs_zscore = min(abs(zscore_start), abs(zscore_end))
+        log_group_median = log_group.median()
+        zscore_median_abs = min(
+            abs(log_group_median - last_log_mean) if last_enough_measurements else np.inf,
+            abs(log_group_median - next_log_mean) if next_enough_measurements else np.inf
+        ) / log_std
+        min_abs_zscore = min(abs(zscore_start), abs(zscore_end), zscore_median_abs)
 
         # If one score is negative and the other positive
         # the group start over the mean and ends under it over vice versa.
@@ -194,18 +192,21 @@ def clean_flux(flux: Flux) -> Flux:
     """
     Denoises and removes outliers from the provided measured flux.
 
-    Tuned to work on the archive data. Dates to test:
+    Tuned to work on the archive data. Start dates to test (~4 day range):
         (
-            '1980-09-25', '1980-09-28', '1984-02-06', '1985-05-02',
-            '1985-12-02', '1986-07-28', '1987-09-03', '1988-03-22',
-            '1991-04-30', '1995-10-04', '1995-10-06', '1996-07-07',
-            '2002-12-19', '2002-12-20', '2009-09-22', '2017-09-06'
+            '1980-05-28', '1980-06-15', '1980-06-27', '1980-07-13',
+            '1980-09-25', '1980-09-28', '1984-02-06', '1984-09-20',
+            '1985-05-02', '1985-07-01', '1985-08-31', '1985-12-02',
+            '1986-02-26', '1986-04-07', '1986-07-28', '1987-09-03',
+            '1988-03-22', '1991-04-30', '1995-10-04', '1995-10-06',
+            '1996-07-07', '2002-12-19', '2002-12-20', '2009-09-22',
+            '2017-09-06'
         )
     """
     if flux.empty:
         return empty_flux()
     # Remove obviously incorrect values
-    flux = flux[(0 < flux) & (flux < 1)]
+    flux = flux[(0 < flux) & (flux < 1) & ~flux.index.duplicated(keep='first')]
     if flux.empty:
         return empty_flux()
     with np.errstate(invalid='ignore'):
