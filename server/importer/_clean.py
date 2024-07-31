@@ -56,11 +56,13 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     is_valid_slope_nearby = is_valid_slope.rolling(_SUSTAINED_MOTION_WINDOW, center=True).mean()
     # If 20% nearby is rough, smooth also this point.
     is_rough_nearby = (is_rough.rolling(_SMOOTHING_WINDOW, center=True).mean() / 0.2).clip(upper=1)
-    smooth_force = pd.concat((1 - is_valid_slope_nearby, is_rough_nearby), axis=1, ).min(axis=1)
+    smooth_force = pd.concat((1 - is_valid_slope_nearby, is_rough_nearby), axis=1).min(axis=1)
+    detail_smooth_force = pd.concat((is_valid_slope_nearby, is_rough_nearby), axis=1).min(axis=1)
 
     # Calculate smoothing corrections
     smooth = log_flux.rolling(_SMOOTHING_WINDOW, center=True).mean()
-    corrections = (smooth - log_flux) * smooth_force
+    detail_corrections = (sustained - log_flux) * detail_smooth_force
+    corrections = (smooth - log_flux) * smooth_force + detail_corrections.clip(upper=0.02, lower=-0.02)
 
     # Clip corrections as excessive corrections only smooth out
     # outlier spikes making them harder to detect later.
@@ -108,7 +110,7 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     for _, log_group in log_groups:
         if (
                 # Filter short groups
-                log_group.index[-1] - log_group.index[0] < timedelta(minutes=1) or
+                log_group.index[-1] - log_group.index[0] < timedelta(seconds=10) or
                 # Filter flat groups (probably the satellite's value border)
                 log_group.rolling(timedelta(minutes=30), center=True).std().median() < 0.0001 or
                 # Filter out unnaturally fast changing groups (likely leftover outlier spots)
