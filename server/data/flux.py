@@ -138,6 +138,7 @@ async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
         source.table_name, records=flux.items()
     )
 
+    # Aggregate refresh cannot be run within transaction
     now = datetime.now(timezone.utc)
     start = flux.index[0]
     end = flux.index[-1]
@@ -158,6 +159,8 @@ async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
 
 
 async def fetch_first_flux_timestamp(connection: Connection) -> Optional[datetime]:
+    # Can be extremely slow if there are a lot of chunks
+    # See: https://github.com/timescale/timescaledb/issues/5102
     return await connection.fetchval('SELECT MIN(time) FROM flux')
 
 

@@ -7,6 +7,7 @@ DATABASE_DATABASE = os.environ.get('DATABASE_DATABASE', 'postgres')
 DATABASE_USERNAME = os.environ.get('DATABASE_USERNAME', 'postgres')
 DATABASE_PASSWORD = os.environ.get('DATABASE_PASSWORD', 'heliotime')
 DATABASE_URL = f'postgresql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_HOST}/{DATABASE_DATABASE}'
+DATABASE_MEMORY_GB = int(os.environ.get('DATABASE_MEMORY_GB', 28))
 
 IMPORT_START = datetime.fromisoformat(os.environ['IMPORT_START']).astimezone(timezone.utc) \
     if 'IMPORT_START' in os.environ and len(os.environ['IMPORT_START']) > 0 else \
