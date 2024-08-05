@@ -1,10 +1,13 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useParentSize } from '@visx/responsive';
 import { useQuery } from '@tanstack/react-query';
 import { useFluxRangeQuery } from '@/api/flux';
 import { NumberRange } from '@/utils/range';
 import { limitView, panView } from '@/utils/panZoom';
 import { useVolatileState } from '@/utils/useVolatile';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faAnglesRight, faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
+import { getHelioviewerUrl } from '@/api/helioviewer';
 import { FluxMain } from './FluxMain';
 import FluxBrush from './FluxBrush';
 import { View } from './flux';
@@ -14,10 +17,11 @@ const MIN_VIEW_SIZE_MS = 5 * 60 * 1000;
 
 export interface FluxChartProps {
   className?: string;
+  selectedTime?: Date;
   onTimeSelect?: (timestamp: Date) => void;
 }
 
-export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
+export default function FluxChart({ className, selectedTime, onTimeSelect }: FluxChartProps) {
   const { parentRef, width, height } = useParentSize();
   const brushHeight = height * 0.15;
   const mainLeftMargin = 100;
@@ -88,6 +92,7 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
     return () => clearInterval(interval);
   }, [getIsFollowing, getRange, getView, intervalMs, setRange, setView]);
 
+  const viewerUrl = useMemo(() => selectedTime && getHelioviewerUrl(selectedTime), [selectedTime]);
   return (
     <div className={`flex flex-col gap-3 ${className ?? ''}`}>
       <h1 className="sm:hidden text-center">Solar Activity Timeline</h1>
@@ -118,8 +123,8 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
             All
           </button>
         </div>
-        <h1 className="mx-2 hidden sm:block">Solar Activity Timeline</h1>
-        <div className="flex-grow basis-0 flex items-center flex-row-reverse">
+        <h1 className="mx-2 hidden sm:block truncate">Solar Activity Timeline</h1>
+        <div className="flex-grow basis-0 flex items-center flex-row-reverse gap-2">
           <button
             className={`btn-tiny ${renderIsFollowing ? 'btn-invert' : ''}`}
             type="button"
@@ -127,9 +132,20 @@ export default function FluxChart({ className, onTimeSelect }: FluxChartProps) {
               setIsFollowing(!getIsFollowing());
               if (getIsFollowing() && getView()[1] < getRange()[1]) panFollowView();
             }}
+            aria-label="Follow live"
           >
-            -&gt;
+            <FontAwesomeIcon icon={faAnglesRight} className="aspect-square" />
           </button>
+          {viewerUrl && (
+            <a
+              className="hmd:hidden btn btn-tiny btn-primary text-nowrap"
+              href={viewerUrl} target="_blank" rel="noopener"
+            >
+              <span className='hidden md:inline'>Helioviewer </span>
+              <span className='md:hidden'>HV </span>
+              <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+            </a>
+          )}
         </div>
       </div>
       <div ref={parentRef} className="flex-grow px-1 md:px-3">

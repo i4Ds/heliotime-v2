@@ -1,4 +1,6 @@
 import { getHelioviewerUrl, getSolarImageUrl } from '@/api/helioviewer';
+import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -42,7 +44,7 @@ export default function HelioView({ timestamp, className = '' }: HelioViewProps)
           alt="Sun imaged by SDO"
           priority
           fill
-          sizes='30dvh'
+          sizes="30dvh"
           onLoad={() => setIsLoading(false)}
           onError={() => setIsLoading(false)}
         />
@@ -56,7 +58,7 @@ export default function HelioView({ timestamp, className = '' }: HelioViewProps)
         )}
       </a>
       <a className="btn btn-primary" href={viewerUrl} target="_blank" rel="noopener">
-        {viewActionText}
+        {viewActionText} <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="ml-0.5" />
       </a>
     </div>
   );
