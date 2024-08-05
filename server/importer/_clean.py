@@ -5,7 +5,7 @@ from typing import cast, Optional
 import numpy as np
 import pandas as pd
 
-from data.flux import Flux, empty_flux
+from data.flux.spec import empty_flux, Flux
 
 
 def _change_speed(series: pd.Series, periods=1) -> pd.Series:
@@ -175,7 +175,7 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
         min_abs_zscore = min(abs(zscore_start), abs(zscore_end), zscore_median_abs)
 
         # If one score is negative and the other positive
-        # the group start over the mean and ends under it over vice versa.
+        # the group starts over the mean and ends under it or vice versa.
         doesnt_crosses_mean = np.sign(zscore_start) == np.sign(zscore_end)
 
         # Filter outlier groups is way above or below

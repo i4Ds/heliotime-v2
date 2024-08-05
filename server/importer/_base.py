@@ -9,7 +9,9 @@ from typing import Callable, Coroutine, Any
 from asyncpg import Connection
 
 from config import IMPORT_START
-from data.flux import Flux, import_flux, fetch_last_flux_timestamp, FluxSource
+from data.flux.source import FluxSource
+from data.flux.spec import Flux
+from data.flux.access import import_flux, fetch_last_flux_timestamp
 from utils.logging import configure_logging
 
 _logger = logging.getLogger(f'importer')

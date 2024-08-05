@@ -14,4 +14,4 @@ IMPORT_START = datetime.fromisoformat(os.environ['IMPORT_START']).astimezone(tim
     datetime.now(tz=timezone.utc) - timedelta(days=30)
 
 FLUX_MAX_RESOLUTION = int(os.environ.get('FLUX_MAX_RESOLUTION', 2000))
-FLUX_QUERY_TIMEOUT = timedelta(seconds=float(os.environ.get('FLUX_QUERY_TIMEOUT', 10)))
+FLUX_QUERY_TIMEOUT = timedelta(seconds=float(os.environ.get('FLUX_QUERY_TIMEOUT', 30)))

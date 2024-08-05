@@ -1,4 +1,3 @@
-import math
 import re
 from datetime import timedelta, datetime, timezone
 from typing import Optional, Generator
@@ -8,7 +7,8 @@ from aiohttp import ClientSession
 from asyncpg import Connection
 
 from data.db import connect_db
-from data.flux import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, FluxSource
+from data.flux.source import FluxSource
+from data.flux.spec import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME
 from ._base import Importer, ImporterProcess
 
 _LIVE_BASE_URL = 'https://services.swpc.noaa.gov/json/goes/primary/'

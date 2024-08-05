@@ -17,7 +17,8 @@ from sunpy.net.fido_factory import UnifiedResponse
 from sunpy.timeseries import TimeSeries
 
 from data.db import connect_db
-from data.flux import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, FluxSource
+from data.flux.source import FluxSource
+from data.flux.spec import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux
 from ._base import Importer, ImporterProcess
 from ._clean import clean_flux
 
