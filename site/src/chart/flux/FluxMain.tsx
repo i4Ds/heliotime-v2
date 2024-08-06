@@ -27,7 +27,7 @@ function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefin
 }
 
 function shouldBrush(event: PointerEvent | React.PointerEvent): boolean {
-  return event.pointerType !== 'touch' && event.button !== 2;
+  return event.pointerType !== 'touch' && event.button === 2;
 }
 
 function FluxTimeTickLabel({ y, formattedValue, ...rest }: TickRendererProps) {
