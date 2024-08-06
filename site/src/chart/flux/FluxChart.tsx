@@ -183,31 +183,33 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
         </div>
       </div>
       <div ref={parentRef} className="flex-grow px-1 md:px-3">
-        <svg
-          width={width}
-          height={height}
-          className="select-none touch-none overflow-visible absolute"
-          onContextMenuCapture={(event) => event.preventDefault()}
-        >
-          <FluxMain
-            width={width - mainLeftMargin - 55}
-            height={height - brushHeight - 75}
-            left={mainLeftMargin}
-            view={renderView}
-            minSizeMs={MIN_VIEW_SIZE_MS}
-            setView={(setter) => setView(setter(getView()))}
-            onTimeSelect={onTimeSelect}
-          />
-          <FluxBrush
+        {width && height && (
+          <svg
             width={width}
-            height={brushHeight}
-            top={height - brushHeight}
-            range={renderRange}
-            view={renderView}
-            minSizeMs={MIN_VIEW_SIZE_MS}
-            onBrush={setView}
-          />
-        </svg>
+            height={height}
+            className="select-none touch-none overflow-visible absolute"
+            onContextMenuCapture={(event) => event.preventDefault()}
+          >
+            <FluxMain
+              width={width - mainLeftMargin - 55}
+              height={height - brushHeight - 75}
+              left={mainLeftMargin}
+              view={renderView}
+              minSizeMs={MIN_VIEW_SIZE_MS}
+              setView={(setter) => setView(setter(getView()))}
+              onTimeSelect={onTimeSelect}
+            />
+            <FluxBrush
+              width={width}
+              height={brushHeight}
+              top={height - brushHeight}
+              range={renderRange}
+              view={renderView}
+              minSizeMs={MIN_VIEW_SIZE_MS}
+              onBrush={setView}
+            />
+          </svg>
+        )}
       </div>
     </div>
   );
