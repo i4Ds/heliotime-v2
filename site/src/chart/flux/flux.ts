@@ -59,23 +59,58 @@ export const formatTimeOnlyDate: TickFormatter<Date | NumberLike> = (value, inde
   return formatDate(value, intervalMs);
 };
 
+function floatRound(value: number): number {
+  const roundDigit = Math.ceil(-Math.log10(value)) + 5;
+  const normalization = 10 ** roundDigit;
+  return Math.round(value * normalization) / normalization;
+}
+
 export const formatWatt: TickFormatter<NumberLike> = (value, index, values) => {
-  /**
-   * WARNING: do not use this formatter on ranges logarithmically smaller than
-   *  0.2 because the tick labels aren't precise enough and will create duplicates.
-   */
-  const exponent = Math.log10(value.valueOf());
-  const flooredExponent = Math.floor(exponent);
-  const range = values.at(-1)!.value.valueOf() / values[0].value.valueOf();
+  const logValue = Math.log10(value.valueOf());
+  const exponent = Math.floor(logValue);
 
-  const baseText = `10${toSuperScript(flooredExponent.toString())}`;
-  if (range > 20) return exponent === flooredExponent ? baseText : undefined;
+  const minValue = values[0].value.valueOf();
+  const maxValue = values.at(-1)!.value.valueOf();
+  const minLogValue = Math.log10(minValue);
+  const maxLogValue = Math.log10(maxValue);
+  const maxExponent = Math.floor(maxLogValue);
 
-  const coefficient = value.valueOf() / 10 ** flooredExponent;
-  let coefficientText = coefficient.toFixed(1);
-  if (range > 3) {
-    if (!coefficientText.endsWith('.0')) return undefined;
-    coefficientText = coefficientText.slice(0, -2);
+  const exponentRange = maxExponent - Math.ceil(minLogValue);
+  const baseText = `10${toSuperScript(exponent.toString())}`;
+  if (exponentRange > 0) return logValue === exponent ? baseText : undefined;
+
+  const minExponent = Math.floor(minLogValue);
+  const minMultiplier = 10 ** minExponent;
+  const minCoefficient = minValue / minMultiplier;
+
+  const coefficientStep = floatRound(
+    (maxValue / minMultiplier - minCoefficient) / (values.length - 1)
+  );
+  let digits = Math.ceil(-Math.log10(coefficientStep));
+
+  const coefficient = value.valueOf() / 10 ** exponent;
+  // If coefficient is an int, show predefined ticks
+  if (digits === 0 && values.length >= 5) {
+    if (![1, 2, 5].includes(Math.round(coefficient))) return undefined;
+  } else {
+    const maxCoefficient = maxValue / 10 ** maxExponent;
+    const coefficientDecimalNormalization = 10 ** (digits - 1);
+    const coefficientDecimalRange =
+      Math.floor(maxCoefficient * coefficientDecimalNormalization) -
+      Math.ceil(minCoefficient * coefficientDecimalNormalization);
+
+    // If there is more than one tick with a coefficient ending with 0 only display those
+    if (coefficientDecimalRange > 0) {
+      if (!coefficient.toFixed(digits).endsWith('0')) return undefined;
+      digits -= 1;
+
+      // Else show min, max, and middle value
+    } else if (
+      index !== 0 &&
+      index !== values.length - 1 &&
+      index !== Math.floor(values.length / 2)
+    )
+      return undefined;
   }
-  return `${coefficientText}×${baseText}`;
+  return `${coefficient.toFixed(digits)}×${baseText}`;
 };
