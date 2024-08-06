@@ -44,6 +44,8 @@ export default function HelioView({ timestamp, className = '' }: HelioViewProps)
           priority
           fill
           sizes="30dvh"
+          // Will trigger immediately on Firefox after the load change.
+          // See: https://github.com/vercel/next.js/issues/30128#issuecomment-1090283728
           onLoad={() => setIsLoading(false)}
           onError={() => setIsLoading(false)}
         />
