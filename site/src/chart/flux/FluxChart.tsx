@@ -60,9 +60,11 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   const setFollowView = useCallback(
     (viewSize: number) => {
       const frontrun = Date.now() + FOLLOW_FRONTRUN_PERCENT * viewSize;
-      setView([frontrun - viewSize, frontrun]);
+      // Needs to be unlimited because the initial view is
+      // set before the range is loaded.
+      setUnlimitedView([frontrun - viewSize, frontrun]);
     },
-    [setView]
+    [setUnlimitedView]
   );
   const panFollowView = useCallback(() => {
     const view = getView();
