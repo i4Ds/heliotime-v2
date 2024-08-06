@@ -30,7 +30,6 @@ export default function HelioView({ timestamp, className = '' }: HelioViewProps)
   useEffect(() => setIsLoading(true), [timestamp]);
   return (
     <div className={`flex flex-col justify-center items-center gap-2 ${className}`}>
-      <h1>Helioviewer Preview</h1>
       <a
         href={viewerUrl}
         target="_blank"
