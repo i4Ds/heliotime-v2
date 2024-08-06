@@ -61,6 +61,7 @@ export interface BrushProps extends PositionSizeProps {
   view: BrushView;
   minSize?: number;
   allowOverflow?: boolean;
+  clickViewSize?: number;
   pointerFilter?: (event: PointerEvent) => boolean;
   onBrushStart?: () => void;
   onBrush: (view: BrushView) => void;
@@ -75,6 +76,7 @@ export default function Brush({
   view,
   minSize: rawMinSize = 0,
   allowOverflow = false,
+  clickViewSize,
   pointerFilter = () => true,
   onBrushStart = () => {},
   onBrush,
@@ -83,6 +85,8 @@ export default function Brush({
   const minSize = Math.min(width, rawMinSize);
   const [renderAction, getAction, setAction] = useVolatileState<Action>();
   const [getVolatileView, setVolatileView, syncVolatileView] = useVolatile(view, onBrush);
+  const setLimitedView = (newView: NonNullable<BrushView>) =>
+    setVolatileView(limitView(newView, allowOverflow ? undefined : [0, width], minSize));
   const stack = useMemo(() => new PointerStack<number>(1), []);
 
   const startAction = (newMode: Move | StartDraw) => (event: React.PointerEvent) => {
@@ -112,13 +116,7 @@ export default function Brush({
       const point = localPoint(event);
       if (point === null) return;
       const newSize = Math.max(minSize, Math.abs(delta));
-      setVolatileView(
-        limitView(
-          [point.x - (delta < 0 ? 0 : newSize), point.x + (delta > 0 ? 0 : newSize)],
-          allowOverflow ? undefined : [0, width],
-          minSize
-        )
-      );
+      setLimitedView([point.x - (delta < 0 ? 0 : newSize), point.x + (delta > 0 ? 0 : newSize)]);
       setAction(delta > 0 ? Move.RIGHT : Move.LEFT);
       return;
     }
@@ -155,7 +153,16 @@ export default function Brush({
     if (!stack.maybeRemove(event)) return;
     const interaction = getAction();
     if (interaction === undefined) return;
-    if (interaction === START_DRAW) setVolatileView(undefined);
+    if (interaction === START_DRAW) {
+      if (clickViewSize === undefined) {
+        setVolatileView(undefined);
+      } else {
+        const point = localPoint(event);
+        if (point === null) return;
+        const radius = clickViewSize / 2;
+        setLimitedView([point.x - radius, point.x + radius]);
+      }
+    }
     setAction(undefined);
     onBrushEnd(getVolatileView());
   };
