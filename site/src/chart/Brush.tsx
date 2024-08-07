@@ -58,13 +58,41 @@ class Move {
 type Action = Move | StartDraw;
 
 export interface BrushProps extends PositionSizeProps {
+  /** Current position of brush. */
   view: BrushView;
+  /**
+   * Smallest allowed view size.
+   * @default 0
+   */
   minSize?: number;
+  /**
+   * Wether to allow dragging / drawing the view beyond the brush bounds.
+   * @default false
+   */
   allowOverflow?: boolean;
+  /**
+   * Size of created view when the brush region is clicked on.
+   * `undefined` makes the brush disappear (zoom out completely).
+   * @default undefined
+   */
   clickViewSize?: number;
+  /**
+   * Whether to process the provided pointer event.
+   * @default always true
+   */
   pointerFilter?: (event: PointerEvent) => boolean;
+  /**
+   * Event called when a brush interaction starts.
+   */
   onBrushStart?: () => void;
+  /**
+   * Event called when the brush view changes.
+   */
   onBrush: (view: BrushView) => void;
+  /**
+   * Event called when the brush interactions stops.
+   * Is called after `onBrush`.
+   */
   onBrushEnd?: (view: BrushView) => void;
 }
 
