@@ -6,29 +6,39 @@ Interactive web viewer of [GOES X-ray Flux](https://www.swpc.noaa.gov/products/g
 
 ## Getting started
 
+First, this repository uses Git submodules, so ensure they are properly initialized:
+
+```sh
+git submodule init 
+git submodule update
+```
+
 Run the following command to deploy the development Docker Compose configuration:
 
 ```sh
 ./du.sh dev deploy
 ```
 
-This will run everything in Docker similar to the production environment.
-To work on the services it is easier to run the individual service on the host, for which check out the readmes in the respective subdirectories ([Server](./server/README.md), [Site](./site/README.md)).
+This will run everything in Docker and make the site available at:
 
-> **Docker Utility** <br>
-> `du.sh` is an alias to `docker compose` which loads the right compose files depending on the selected environment:
-> development `dev` or production `prod`. Only production requires certain environment variables to be set.
-> See [Configuration](#configuration) for available options.
+- <http://localhost:3000/>
 
-For the database, there are some useful commands:
+For development it is easier to run the individual services on the host. Check out the readmes ([Server](./server/README.md), [Site](./site/README.md)) in the respective subdirectories.
+
+For the database, here are some useful commands:
 
 ```sh
-# Only start the database
+# Start only the database
 ./du.sh dev deploy db
 
 # Reset the database (wipes all data)
 ./du.sh dev db:reset
 ```
+
+> **Docker Utility** <br>
+> `du.sh` is an alias to `docker compose` which loads the right compose files depending on the selected environment:
+> development `dev` or production `prod`. Only production requires certain environment variables to be set.
+> See [Configuration](#configuration) for available options.
 
 ## Deployment
 
