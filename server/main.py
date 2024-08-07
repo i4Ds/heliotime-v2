@@ -73,7 +73,6 @@ async def get_flux(
     if end - start > timedelta(days=100 * 365):
         raise HTTPException(400, 'Time range cannot be larger than 100 years.')
 
-    # TODO: add resource utilization check
     resolution = min(max(resolution, 1), FLUX_MAX_RESOLUTION)
     interval = (end - start) / resolution
     try:

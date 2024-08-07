@@ -4,8 +4,7 @@
 #   env: dev / prod
 #   rest:
 #     up -d, stop db, ... -> Normal compose subcommands
-#     db:deploy           -> Deploy database
-#     db:stop             -> Stop database
+#     deploy [service]    -> Deploy checked out version
 #     db:reset            -> Reset database
 
 set -e
@@ -44,11 +43,7 @@ compose () {
     "$@"
 }
 
-if [ "$2" == "db:deploy" ]; then
-  compose up --detach --build db
-elif [ "$2" == "db:stop" ]; then
-  compose stop db
-elif [ "$2" == "db:reset" ]; then
+if [ "$2" == "db:reset" ]; then
   compose rm --stop --volumes db
 elif [ "$2" == "deploy" ]; then
   compose up --detach --build "${@:3}"

@@ -1,29 +1,61 @@
-# Heliotime
+# Heliotime ([heliotime.org](https://heliotime.org/))
+
+Interactive web viewer of [GOES X-ray Flux](https://www.swpc.noaa.gov/products/goes-x-ray-flux) data from 1980 to now. Lets you inspect specific solar flares, the different solar cycles, or any other time range of your choosing. Includes a preview of [Helioviewer](https://helioviewer.org/?imageLayers=[SDO%2CAIA%2CAIA%2C171%2C1%2C100]) when selecting a timestamp. See [heliotime.org](https://heliotime.org/) or the [screenshots](#screenshot).
 
 <!-- TODO: add getting started, deploy, etc.-->
 
-Start database:
+## Getting started
+
+Run the following command to deploy the development Docker Compose configuration:
 
 ```sh
-./du.sh dev db:deploy
+./du.sh dev deploy
 ```
+
+This will run everything in Docker similar to the production environment.
+To work on the services it is easier to run the individual service on the host, for which check out the readmes in the respective subdirectories ([Server](./server/README.md), [Site](./site/README.md)).
 
 > **Docker Utility** <br>
 > `du.sh` is an alias to `docker compose` which loads the right compose files depending on the selected environment:
 > development `dev` or production `prod`. Only production requires certain environment variables to be set.
 > See [Configuration](#configuration) for available options.
 
+For the database, there are some useful commands:
+
+```sh
+# Only start the database
+./du.sh dev deploy db
+
+# Reset the database (wipes all data)
+./du.sh dev db:reset
+```
+
+## Deployment
+
+See [deployment](./docs/deploy.md) on how to deploy Heliotime in production.
+
 ## Configuration
 
-The server, database, and site can be configured using the following environment variables:
+The Docker Compose deployment, site, and server can be configured using the following environment variables:
 
-| <div style="width:150px">Name</div> |       Dev Default       | Prod Default | Description                                     |
-| :---------------------------------: | :---------------------: | :----------: | :---------------------------------------------- |
-|      `EXTERNAL_DATABASE_PORT`       |         `5432`          |     same     | Port the database will be exposed at.           |
-|           `DATABASE_HOST`           |   `db` / `localhost`    |     same     | Hostname of the database. (Docker / Host)       |
-|           `DATABASE_PORT`           |         `5432`          |     same     | Port of the database. (useful for external DBs) |
-|         `DATABASE_DATABASE`         |       `postgres`        |     same     | Name of the database to use.                    |
-|         `DATABASE_USERNAME`         |       `postgres`        |     same     | Username to authenticate with the database.     |
-|         `DATABASE_PASSWORD`         |       `heliotime`       |      -       | Password to authenticate with the database.     |
-|           `IMPORT_START`            |      now - 30 days      |     same     | From when to import data in ISO format.         |
-|        `NEXT_PUBLIC_API_URL`        | `http://localhost:8000` |     same     | URL used by the browser to access the API.      |
+| <div style="width:150px">Name</div> |       Dev Default       | Prod Default | Description                                                                                   |
+| :---------------------------------: | :---------------------: | :----------: | :-------------------------------------------------------------------------------------------- |
+|             `API_PORT`              |         `8000`          |     same     | Port the api (server) will be exposed at.                                                     |
+|             `SITE_PORT`             |         `3000`          |     same     | Port the site will be exposed at.                                                             |
+|      `EXTERNAL_DATABASE_PORT`       |         `5432`          |     same     | Port the database will be exposed at.                                                         |
+|           `DATABASE_HOST`           |   `db` / `localhost`    |     same     | Hostname of the database. (Docker / Host)                                                     |
+|           `DATABASE_PORT`           |         `5432`          |     same     | Port of the database. (useful for external DBs)                                               |
+|         `DATABASE_DATABASE`         |       `postgres`        |     same     | Name of the database to use.                                                                  |
+|         `DATABASE_USERNAME`         |       `postgres`        |     same     | Username to authenticate with the database.                                                   |
+|         `DATABASE_PASSWORD`         |       `heliotime`       |      -       | Password to authenticate with the database.                                                   |
+|        `DATABASE_MEMORY_GB`         |          `28`           |     same     | GB of memory available to the database. Used by migrations to optimize chunk and cache sizes. |
+|           `IMPORT_START`            |      now - 30 days      |     same     | From when to import data in ISO format.                                                       |
+|        `FLUX_MAX_RESOLUTION`        |         `2000`          |     same     | Max flux resolution allowed to be requested. Bigger request will be downsized.                |
+|        `FLUX_QUERY_TIMEOUT`         |          `30`           |     same     | Timeout of flux database queries before giving up.                                            |
+|        `NEXT_PUBLIC_API_URL`        | `http://localhost:8000` |     same     | URL used by the browser to access the API.                                                    |
+
+Docker Compose automatically loads `.env` in the repository root and the site (Next.js) does the same for `site/.env.local` when running on the host.
+
+## Screenshot
+
+![screenshot](docs/screenshot.png)
