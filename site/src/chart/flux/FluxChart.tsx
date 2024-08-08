@@ -13,13 +13,16 @@ import {
   faArrowUpRightFromSquare,
 } from '@fortawesome/free-solid-svg-icons';
 import { getHelioviewerUrl } from '@/api/helioviewer';
+import { useWindowEvent } from '@/utils/useWindowEvent';
+import { useInterval } from '@/utils/useInterval';
 import { FluxMain } from './FluxMain';
 import FluxBrush from './FluxBrush';
 import { View } from './flux';
 
 const FOLLOW_FRONTRUN_PERCENT = 0.1;
 const MIN_VIEW_SIZE_MS = 5 * 60 * 1000;
-const PAN_BUTTON_JUMP = 0.1;
+const PAN_SPEED = 0.4;
+const MAX_FRAME_INTERVAL = 1000 / 30;
 
 export interface FluxChartProps {
   className?: string;
@@ -66,18 +69,6 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
     },
     [setUnlimitedView]
   );
-  const panFollowView = useCallback(() => {
-    const view = getView();
-    setFollowView(view[1] - view[0]);
-  }, [getView, setFollowView]);
-
-  const setPanView = useCallback(
-    (relativeDelta: number) => {
-      const view = getView();
-      setView(panView(view, (view[1] - view[0]) * relativeDelta));
-    },
-    [getView, setView]
-  );
 
   // Set default view to 1 day look back
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,22 +84,33 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   }, [dataRange, getRange, getView, setView, setRange]);
 
   // Follow live time
-  const intervalMs = Math.max(
-    // Round interval to no recreate the interval too often
-    2 ** Math.ceil(Math.log2((renderView[1] - renderView[0]) / width / 2)),
-    100
+  // Reduce refresh rate when zoomed out
+  const liveIntervalsMs = Math.max(
+    MAX_FRAME_INTERVAL,
+    width === 0 ? 0 : (renderView[1] - renderView[0]) / width / 32
   );
-  useEffect(() => {
-    // Update range first to ensure correct delta calculation
+  useInterval(liveIntervalsMs, (deltaMs) => {
     setRange([getRange()[0], Date.now()]);
-    const interval = setInterval(() => {
-      const range = getRange();
-      const newEnd = Date.now();
-      setRange([range[0], newEnd]);
-      if (getIsFollowing()) setUnlimitedView(panView(getView(), newEnd - range[1]));
-    }, intervalMs);
-    return () => clearInterval(interval);
-  }, [getIsFollowing, getRange, getView, intervalMs, setRange, setUnlimitedView]);
+    if (getIsFollowing()) setUnlimitedView(panView(getView(), deltaMs));
+  });
+
+  // Smooth panning logic
+  const [, getPanSpeed, setPanSpeed] = useVolatileState(0);
+  const setPanView = (relativeDelta: number) => {
+    const view = getView();
+    setView(panView(view, (view[1] - view[0]) * relativeDelta));
+  };
+  useInterval(
+    MAX_FRAME_INTERVAL,
+    getPanSpeed() === 0 ? undefined : (deltaMs) => setPanView((getPanSpeed() * deltaMs) / 1000)
+  );
+  useWindowEvent('keydown', (event) => {
+    if (event.key === 'ArrowRight') setPanSpeed(PAN_SPEED);
+    if (event.key === 'ArrowLeft') setPanSpeed(-PAN_SPEED);
+  });
+  useWindowEvent('keyup', (event) => {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') setPanSpeed(0);
+  });
 
   const viewerUrl = useMemo(() => selectedTime && getHelioviewerUrl(selectedTime), [selectedTime]);
   return (
@@ -148,24 +150,31 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
             type="button"
             onClick={() => {
               setIsFollowing(!getIsFollowing());
-              if (getIsFollowing() && getView()[1] < getRange()[1]) panFollowView();
+              if (getIsFollowing() && getView()[1] < getRange()[1]) {
+                const view = getView();
+                setFollowView(view[1] - view[0]);
+              }
             }}
             aria-label="Follow live"
           >
             <FontAwesomeIcon icon={faAnglesRight} className="aspect-square" />
           </button>
           <button
-            className="hidden xs:block hmd:block btn-tiny"
+            className="hidden xs:block hmd:block btn-tiny select-none touch-none"
             type="button"
-            onClick={() => setPanView(PAN_BUTTON_JUMP)}
+            onContextMenuCapture={(event) => event.preventDefault()}
+            onPointerDown={() => setPanSpeed(PAN_SPEED)}
+            onPointerUp={() => setPanSpeed(0)}
             aria-label="Pan right"
           >
             <FontAwesomeIcon icon={faAngleRight} className="aspect-square" />
           </button>
           <button
-            className="hidden xs:block hmd:block btn-tiny "
+            className="hidden xs:block hmd:block btn-tiny select-none touch-none"
             type="button"
-            onClick={() => setPanView(-PAN_BUTTON_JUMP)}
+            onContextMenuCapture={(event) => event.preventDefault()}
+            onPointerDown={() => setPanSpeed(-PAN_SPEED)}
+            onPointerUp={() => setPanSpeed(0)}
             aria-label="Pan left"
           >
             <FontAwesomeIcon icon={faAngleLeft} className="aspect-square" />

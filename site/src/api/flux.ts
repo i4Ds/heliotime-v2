@@ -1,3 +1,4 @@
+import { expCeil, resCeil, resFloor } from '@/utils/math';
 import { NumberRange } from '@/utils/range';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useMemo, useRef } from 'react';
@@ -73,6 +74,7 @@ export function useFlux(from: number, to: number, resolution: number): FluxSerie
   const { data = [], isFetched } = useQuery({
     ...fluxQueryOptions(from, to, resolution),
     placeholderData: selectFlux(lastFetch.current, from, to),
+    enabled: !Number.isNaN(from) && !Number.isNaN(to) && resolution > 0
   });
   if (isFetched) lastFetch.current = data;
   return data;
@@ -97,18 +99,6 @@ export function useDebouncedFlux(
   return useMemo(() => selectFlux(data, from, to), [data, from, to]);
 }
 
-function resolutionCeil(value: number, resolution: number): number {
-  return Math.ceil(value / resolution) * resolution;
-}
-
-function resolutionFloor(value: number, resolution: number): number {
-  return Math.floor(value / resolution) * resolution;
-}
-
-function log(value: number, base: number): number {
-  return Math.log(value) / Math.log(base);
-}
-
 /**
  * {@link useDebouncedFlux} but aligns its parameters to certain grids,
  * making it use the cache more often.
@@ -122,16 +112,16 @@ export function useStableDebouncedFlux(
   relativeChunkSize = 0.5
 ): FluxSeries {
   // Stabilize resolution
-  let stableResolution = resolutionCeil(resolution, resolutionStepSize);
+  let stableResolution = resCeil(resolution, resolutionStepSize);
 
   // Stabilize interval
   const interval = (to - from) / stableResolution;
-  const stableInterval = intervalStepSize ** Math.ceil(log(interval, intervalStepSize));
+  const stableInterval = expCeil(interval, intervalStepSize);
 
   // Stabilize from and to
   const chunkSize = stableInterval * stableResolution * relativeChunkSize;
-  const stableFrom = resolutionFloor(from, chunkSize);
-  const stableTo = resolutionCeil(to, chunkSize);
+  const stableFrom = resFloor(from, chunkSize);
+  const stableTo = resCeil(to, chunkSize);
   stableResolution = Math.ceil((stableTo - stableFrom) / stableInterval);
 
   const data = useDebouncedFlux(stableFrom, stableTo, stableResolution);
