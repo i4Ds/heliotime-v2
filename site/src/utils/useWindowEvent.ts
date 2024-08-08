@@ -9,7 +9,8 @@ export type EventListener<EventType extends keyof WindowEventMap> = (
  */
 export function useWindowEvent<EventType extends keyof WindowEventMap>(
   eventType: EventType,
-  callback: EventListener<EventType>
+  callback: EventListener<EventType>,
+  options?: AddEventListenerOptions
 ) {
   const savedCallback = useRef<EventListener<EventType>>(callback);
   useEffect(() => {
@@ -18,7 +19,7 @@ export function useWindowEvent<EventType extends keyof WindowEventMap>(
 
   useEffect(() => {
     const listener = (event: WindowEventMap[EventType]) => savedCallback.current(event);
-    window.addEventListener(eventType, listener);
+    window.addEventListener(eventType, listener, options);
     return () => window.removeEventListener(eventType, listener);
-  }, [eventType]);
+  }, [eventType, options]);
 }

@@ -9,7 +9,7 @@ import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
 import { Dispatch, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NumberRange } from '@/utils/range';
-import { pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
+import { panView, pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
@@ -115,21 +115,27 @@ export function FluxMain({
     [onTimeSelect, timeScale]
   );
 
-  const handleWheel = useCallback(
-    (event: React.WheelEvent<SVGElement>) =>
+  useWindowEvent(
+    'wheel',
+    (event) => {
+      event.preventDefault();
       setView((current) => {
         const point = localPoint(event);
         if (point === null) return current;
         const currentOrDomain =
           current ?? (timeScale.domain().map((d) => d.getTime()) as NumberRange);
-        return wheelZoomView(
+        const zoomed = wheelZoomView(
           currentOrDomain,
           event.deltaY,
           timeScale.invert(point.x).getTime(),
           minSizeMs
         );
-      }),
-    [minSizeMs, setView, timeScale]
+
+        const panDelta = timeScale.invert(event.deltaX).getTime() - view[0];
+        return panView(zoomed, panDelta);
+      });
+    },
+    { passive: false }
   );
 
   // Handle drag interactions
@@ -208,7 +214,6 @@ export function FluxMain({
       onPointerOver={handleHover}
       onPointerMove={handleHover}
       onPointerLeave={handleHoverEnd}
-      onWheel={handleWheel}
       className="overflow-visible"
     >
       {/* Needs to reference child because of how use-measure works. */}
