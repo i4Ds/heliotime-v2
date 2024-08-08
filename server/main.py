@@ -70,8 +70,6 @@ async def get_flux(
         end = datetime.now(timezone.utc)
     if start > end:
         raise HTTPException(400, '"start" timestamp must be before "end" timestamp.')
-    if end - start > timedelta(days=100 * 365):
-        raise HTTPException(400, 'Time range cannot be larger than 100 years.')
 
     resolution = min(max(resolution, 1), FLUX_MAX_RESOLUTION)
     interval = (end - start) / resolution
