@@ -221,7 +221,7 @@ export function FluxMain({
           to={10 ** (-8 + index)}
           width={width}
           height={height}
-          className={index % 2 ? 'fill-bg-0' : 'fill-bg'}
+          className={index % 2 ? 'fill-bg' : 'fill-bg-0'}
           label={'ABCMX'[index]}
           labelOffset={width + 12}
           labelProps={{ textAnchor: 'start', className: 'fill-text' }}
