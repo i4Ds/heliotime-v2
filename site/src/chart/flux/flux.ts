@@ -59,12 +59,6 @@ export const formatTimeOnlyDate: TickFormatter<Date | NumberLike> = (value, inde
   return formatDate(value, intervalMs);
 };
 
-function floatRound(value: number): number {
-  const roundDigit = Math.ceil(-Math.log10(value)) + 5;
-  const normalization = 10 ** roundDigit;
-  return Math.round(value * normalization) / normalization;
-}
-
 export const formatWatt: TickFormatter<NumberLike> = (value, index, values) => {
   const logValue = Math.log10(value.valueOf());
   const exponent = Math.floor(logValue);
@@ -79,33 +73,38 @@ export const formatWatt: TickFormatter<NumberLike> = (value, index, values) => {
   const baseText = `10${toSuperScript(exponent.toString())}`;
   if (exponentRange > 0) return logValue === exponent ? baseText : undefined;
 
-  const minExponent = Math.floor(minLogValue);
-  const minMultiplier = 10 ** minExponent;
-  const minCoefficient = minValue / minMultiplier;
-
-  const coefficientStep = floatRound(
-    (maxValue / minMultiplier - minCoefficient) / (values.length - 1)
-  );
-  let digits = Math.ceil(-Math.log10(coefficientStep));
+  const maxMultiplier = 10 ** maxExponent;
+  const maxCoefficient = maxValue / maxMultiplier;
+  const beforeMaxCoefficient = values.at(-2)!.value.valueOf() / maxMultiplier;
+  // Measure coefficient step at top because on a 10^x border the upper part will first be split
+  const coefficientStep = maxCoefficient - beforeMaxCoefficient;
+  // Multiply by 1.1 to counteract floating point errors where the step is 0.09999
+  let digits = -Math.floor(Math.log10(coefficientStep * 1.1));
 
   const coefficient = value.valueOf() / 10 ** exponent;
   // If coefficient is an int, show predefined ticks
-  if (digits === 0 && values.length >= 5) {
+  if (digits === 0 && values.length > 7) {
     if (![1, 2, 5].includes(Math.round(coefficient))) return undefined;
   } else {
-    const maxCoefficient = maxValue / 10 ** maxExponent;
+    const minExponent = Math.floor(minLogValue);
+    const minCoefficient = minValue / 10 ** minExponent;
     const coefficientDecimalNormalization = 10 ** (digits - 1);
     const coefficientDecimalRange =
-      Math.floor(maxCoefficient * coefficientDecimalNormalization) -
-      Math.ceil(minCoefficient * coefficientDecimalNormalization);
+      // Multiply by 1.1 and 0.9 to account for float imprecision
+      Math.floor(maxCoefficient * coefficientDecimalNormalization * 1.1) -
+      Math.ceil(minCoefficient * coefficientDecimalNormalization * 0.9);
 
     // If there is more than one tick with a coefficient ending with 0 only display those
-    if (coefficientDecimalRange > 0) {
+    if (
+      (coefficientDecimalRange < -1 || coefficientDecimalRange > 0) &&
+      (minCoefficient <= 8 || maxCoefficient >= 2)
+    ) {
       if (!coefficient.toFixed(digits).endsWith('0')) return undefined;
       digits -= 1;
 
       // Else show min, max, and middle value
     } else if (
+      !coefficient.toFixed(digits).endsWith('0') &&
       index !== 0 &&
       index !== values.length - 1 &&
       index !== Math.floor(values.length / 2)
