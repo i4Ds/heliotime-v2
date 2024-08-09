@@ -33,10 +33,10 @@ export interface FluxChartProps {
 
 export default function FluxChart({ className, selectedTime, onTimeSelect }: FluxChartProps) {
   const { parentRef, width, height } = useParentSize();
-  const brushHeight = height * 0.15;
-  const mainLeftMargin = 100;
-
   const [lockWattAxis, setLockWattAxis] = useState(true);
+  const mainLeftMargin = lockWattAxis ? 68 : 100;
+  const brushHeight = height * 0.15;
+
   const [renderRange, getRange, setRange] = useVolatileState<NumberRange>([0, 0]);
   const [renderView, getView, setRawView] = useVolatileState<View>(renderRange);
   const [renderIsFollowing, getIsFollowing, setIsFollowing] = useVolatileState(true);
@@ -213,7 +213,7 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
               left={mainLeftMargin}
               view={renderView}
               minSizeMs={MIN_VIEW_SIZE_MS}
-              wattRange={lockWattAxis ? [1e-9, 1e-2] : undefined}
+              lockWattAxis={lockWattAxis}
               setView={(setter) => setView(setter(getView()))}
               onTimeSelect={onTimeSelect}
             />

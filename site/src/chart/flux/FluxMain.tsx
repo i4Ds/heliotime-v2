@@ -49,7 +49,7 @@ function FluxTimeTickLabel({ y, formattedValue, ...rest }: TickRendererProps) {
 interface FluxMainProps extends PositionSizeProps {
   onTimeSelect?: (timestamp: Date) => void;
   minSizeMs: number;
-  wattRange?: NumberRange;
+  lockWattAxis: boolean;
   view: View;
   setView: Dispatch<(previous: View) => View>;
 }
@@ -61,7 +61,7 @@ export function FluxMain({
   left = 0,
   onTimeSelect,
   minSizeMs,
-  wattRange,
+  lockWattAxis,
   view,
   setView,
 }: FluxMainProps) {
@@ -80,10 +80,10 @@ export function FluxMain({
     () =>
       scaleLog({
         range: [height, 0],
-        domain: wattRange ?? wattExtent(data, 0.1),
+        domain: lockWattAxis ? [1e-9, 1e-2] : wattExtent(data, 0.1),
         clamp: true,
       }),
-    [data, height, wattRange]
+    [data, height, lockWattAxis]
   );
 
   const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
@@ -274,7 +274,7 @@ export function FluxMain({
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
         tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
-        labelOffset={72}
+        labelOffset={lockWattAxis ? 40 : 72}
         labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
       />
       {tooltipData && (
