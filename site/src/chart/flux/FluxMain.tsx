@@ -49,6 +49,7 @@ function FluxTimeTickLabel({ y, formattedValue, ...rest }: TickRendererProps) {
 interface FluxMainProps extends PositionSizeProps {
   onTimeSelect?: (timestamp: Date) => void;
   minSizeMs: number;
+  wattRange?: NumberRange;
   view: View;
   setView: Dispatch<(previous: View) => View>;
 }
@@ -60,6 +61,7 @@ export function FluxMain({
   left = 0,
   onTimeSelect,
   minSizeMs,
+  wattRange,
   view,
   setView,
 }: FluxMainProps) {
@@ -78,10 +80,10 @@ export function FluxMain({
     () =>
       scaleLog({
         range: [height, 0],
-        domain: wattExtent(data, 0.1),
+        domain: wattRange ?? wattExtent(data, 0.1),
         clamp: true,
       }),
-    [data, height]
+    [data, height, wattRange]
   );
 
   const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =

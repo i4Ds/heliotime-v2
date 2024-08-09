@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParentSize } from '@visx/responsive';
 import { useQuery } from '@tanstack/react-query';
 import { useFluxRangeQuery } from '@/api/flux';
@@ -10,6 +10,7 @@ import {
   faAngleLeft,
   faAngleRight,
   faAnglesRight,
+  faArrowDownUpLock,
   faArrowUpRightFromSquare,
 } from '@fortawesome/free-solid-svg-icons';
 import { getHelioviewerUrl } from '@/api/helioviewer';
@@ -35,6 +36,7 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   const brushHeight = height * 0.15;
   const mainLeftMargin = 100;
 
+  const [lockWattAxis, setLockWattAxis] = useState(true);
   const [renderRange, getRange, setRange] = useVolatileState<NumberRange>([0, 0]);
   const [renderView, getView, setRawView] = useVolatileState<View>(renderRange);
   const [renderIsFollowing, getIsFollowing, setIsFollowing] = useVolatileState(true);
@@ -114,7 +116,10 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
 
   const viewerUrl = useMemo(() => selectedTime && getHelioviewerUrl(selectedTime), [selectedTime]);
   return (
-    <div className={`flex flex-col gap-3 ${className ?? ''}`}>
+    <div
+      className={`flex flex-col gap-3 select-none touch-none ${className ?? ''}`}
+      onContextMenuCapture={(event) => event.preventDefault()}
+    >
       <h1 className="sm:hidden text-center">Solar Activity Timeline</h1>
       <div className="flex px-3 overflow-hidden">
         <div className="flex-grow basis-0 flex items-center gap-2">
@@ -143,7 +148,7 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
             All
           </button>
         </div>
-        <h1 className="mx-2 hidden sm:block truncate">Solar Activity Timeline</h1>
+        <h1 className="mx-2 hidden sm:block truncate select-text">Solar Activity Timeline</h1>
         <div className="flex-grow basis-0 flex items-center flex-row-reverse gap-2">
           <button
             className={`btn-tiny ${renderIsFollowing ? 'btn-invert' : ''}`}
@@ -160,9 +165,8 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
             <FontAwesomeIcon icon={faAnglesRight} className="aspect-square" />
           </button>
           <button
-            className="hidden xs:block hmd:block btn-tiny select-none touch-none"
+            className="hidden xs:block hmd:block btn-tiny"
             type="button"
-            onContextMenuCapture={(event) => event.preventDefault()}
             onPointerDown={() => setPanSpeed(PAN_SPEED)}
             onPointerUp={() => setPanSpeed(0)}
             aria-label="Pan right"
@@ -170,14 +174,21 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
             <FontAwesomeIcon icon={faAngleRight} className="aspect-square" />
           </button>
           <button
-            className="hidden xs:block hmd:block btn-tiny select-none touch-none"
+            className="hidden xs:block hmd:block btn-tiny"
             type="button"
-            onContextMenuCapture={(event) => event.preventDefault()}
             onPointerDown={() => setPanSpeed(-PAN_SPEED)}
             onPointerUp={() => setPanSpeed(0)}
             aria-label="Pan left"
           >
             <FontAwesomeIcon icon={faAngleLeft} className="aspect-square" />
+          </button>
+          <button
+            className={`hidden xs:block hmd:block btn-tiny ${lockWattAxis ? 'btn-invert' : ''}`}
+            type="button"
+            onClick={() => setLockWattAxis(!lockWattAxis)}
+            aria-label="Lock watt axis"
+          >
+            <FontAwesomeIcon icon={faArrowDownUpLock} />
           </button>
           {viewerUrl && (
             <a
@@ -195,18 +206,14 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
       </div>
       <div ref={parentRef} className="flex-grow px-1 md:px-3">
         {width && height && (
-          <svg
-            width={width}
-            height={height}
-            className="select-none touch-none overflow-visible absolute"
-            onContextMenuCapture={(event) => event.preventDefault()}
-          >
+          <svg width={width} height={height} className="overflow-visible absolute">
             <FluxMain
               width={width - mainLeftMargin - 55}
               height={height - brushHeight - 75}
               left={mainLeftMargin}
               view={renderView}
               minSizeMs={MIN_VIEW_SIZE_MS}
+              wattRange={lockWattAxis ? [1e-9, 1e-2] : undefined}
               setView={(setter) => setView(setter(getView()))}
               onTimeSelect={onTimeSelect}
             />
