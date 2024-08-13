@@ -1,5 +1,4 @@
 import { FluxMeasurement, useStableDebouncedFlux } from '@/api/flux';
-import { HorizontalBand } from '@/chart/HorizontalBand';
 import { AxisBottom, AxisLeft, TickRendererProps } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
@@ -19,6 +18,7 @@ import { Text } from '@visx/text';
 import { View, formatTime, formatWatt, timeExtent, wattExtent } from './flux';
 import { PositionSizeProps } from '../base';
 import Brush, { BrushView } from '../Brush';
+import FlareClassBands from './FlareClassBands';
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
   return (
@@ -221,32 +221,7 @@ export function FluxMain({
       {/* Needs to reference child svg because of browser
           inconsistencies use-measure does not account for. */}
       <svg ref={tooltipContainerRef} />
-      {[0, 1, 2, 3, 4].map((index) => (
-        <HorizontalBand
-          key={index}
-          scale={wattScale}
-          from={10 ** (-7 + index)}
-          to={10 ** (-8 + index)}
-          width={width}
-          height={height}
-          className={index % 2 ? 'fill-bg' : 'fill-bg-0'}
-          label={'ABCMX'[index]}
-          labelOffset={width + 12}
-          labelProps={{ textAnchor: 'start', className: 'fill-text' }}
-        />
-      ))}
-      <Text
-        x={width + 38}
-        y={height / 2}
-        verticalAnchor="end"
-        textAnchor="middle"
-        angle={90}
-        className="fill-text"
-        // eslint-disable-next-line react/jsx-props-no-spreading
-        {...textSize.sm}
-      >
-        Xray Flare Class
-      </Text>
+      <FlareClassBands width={width} height={height} scale={wattScale} />
       <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
       <LinePath
         curve={curveMonotoneX}
