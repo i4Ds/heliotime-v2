@@ -20,6 +20,7 @@ import { FluxMain } from './FluxMain';
 import FluxBrush from './FluxBrush';
 import { View } from './flux';
 
+const CHART_TITLE = 'Solar Activity Timeline';
 const FOLLOW_FRONTRUN_PERCENT = 0.1;
 const MIN_VIEW_SIZE_MS = 5 * 60 * 1000;
 const PAN_SPEED = 0.4;
@@ -114,6 +115,8 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   useWindowEvent('keyup', (event) => {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') setPanSpeed(0);
   });
+  useWindowEvent('pointerup', () => setPanSpeed(0))
+  useWindowEvent('pointercancel', () => setPanSpeed(0))
 
   const viewerUrl = useMemo(() => selectedTime && getHelioviewerUrl(selectedTime), [selectedTime]);
   return (
@@ -121,8 +124,8 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
       className={`flex flex-col gap-3 select-none touch-none ${className ?? ''}`}
       onContextMenuCapture={(event) => event.preventDefault()}
     >
-      <h1 className="sm:hidden text-center">Solar Activity Timeline</h1>
-      <div className="flex px-3 overflow-hidden">
+      <h1 className="sm:hidden text-center">{CHART_TITLE}</h1>
+      <div className="flex mx-3 overflow-x-auto gap-2">
         <div className="flex-grow basis-0 flex items-center gap-2">
           {(
             [
@@ -149,7 +152,7 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
             All
           </button>
         </div>
-        <h1 className="mx-2 hidden sm:block truncate select-text">Solar Activity Timeline</h1>
+        <h1 className="hidden sm:block overflow-x-auto text-nowrap select-text">{CHART_TITLE}</h1>
         <div className="flex-grow basis-0 flex items-center flex-row-reverse gap-2">
           <button
             className={`btn-tiny ${renderIsFollowing ? 'btn-invert' : ''}`}
@@ -169,7 +172,6 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
             className="hidden xs:block hmd:block btn-tiny"
             type="button"
             onPointerDown={() => setPanSpeed(PAN_SPEED)}
-            onPointerUp={() => setPanSpeed(0)}
             aria-label="Pan right"
           >
             <FontAwesomeIcon icon={faAngleRight} className="aspect-square" />
@@ -178,13 +180,12 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
             className="hidden xs:block hmd:block btn-tiny"
             type="button"
             onPointerDown={() => setPanSpeed(-PAN_SPEED)}
-            onPointerUp={() => setPanSpeed(0)}
             aria-label="Pan left"
           >
             <FontAwesomeIcon icon={faAngleLeft} className="aspect-square" />
           </button>
           <button
-            className={`hidden xs:block hmd:block btn-tiny ${lockWattAxis ? 'btn-invert' : ''}`}
+            className={`block btn-tiny ${lockWattAxis ? 'btn-invert' : ''}`}
             type="button"
             onClick={() => setLockWattAxis(!lockWattAxis)}
             aria-label="Lock watt axis"
