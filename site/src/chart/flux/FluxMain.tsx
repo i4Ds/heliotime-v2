@@ -218,8 +218,9 @@ export function FluxMain({
       onPointerLeave={handleHoverEnd}
       className="overflow-visible"
     >
-      {/* Needs to reference child because of how use-measure works. */}
-      <g ref={tooltipContainerRef} />
+      {/* Needs to reference child svg because of browser
+          inconsistencies use-measure does not account for. */}
+      <svg ref={tooltipContainerRef} />
       {[0, 1, 2, 3, 4].map((index) => (
         <HorizontalBand
           key={index}
