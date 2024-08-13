@@ -59,10 +59,6 @@ export default function FluxBrush({
     [height, data]
   );
 
-  const brushView = useMemo(() => {
-    const converted = [timeScale(view[0]), timeScale(view[1])] as const;
-    return converted[0] === 0 && converted[1] === width ? undefined : converted;
-  }, [timeScale, view, width]);
   return (
     <svg width={width} height={height} y={top} x={left} className="overflow-visible">
       <defs>
@@ -124,7 +120,7 @@ export default function FluxBrush({
       <Brush
         width={width}
         height={height}
-        view={brushView}
+        view={[timeScale(view[0]), timeScale(view[1])]}
         minSize={timeScale(range[0] + minSizeMs)}
         allowOverflow
         clickViewSize={30}
