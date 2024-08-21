@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import math
+import statistics
+import time
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from multiprocessing import Pool
-from typing import Annotated, Awaitable, Callable, Collection
+from typing import Annotated, Awaitable, Callable
 
 import numpy as np
 from aiohttp import ClientSession, ClientResponse
@@ -52,17 +57,30 @@ async def _fetch_flux(session: ClientSession, start: datetime, end: datetime) ->
     })
 
 
-async def _measure_request(request: Callable[[], Awaitable[ClientResponse]]) -> timedelta:
-    start_time = datetime.now()
+async def _measure_request(request: Callable[[], Awaitable[ClientResponse]]) -> float:
+    start_time = time.perf_counter()
     response = await request()
     if not response.ok:
         raise ValueError(f'Received error response {response.status}: {repr(response)}')
-    end_time = datetime.now()
+    end_time = time.perf_counter()
     return end_time - start_time
 
 
-def _mean_timedelta(deltas: Collection[timedelta]) -> timedelta:
-    return sum(deltas, timedelta()) / len(deltas)
+@dataclass(frozen=True)
+class _SimulationResult:
+    mean_latency: timedelta
+    median_latency: timedelta
+    request_count: int
+    error_count: int
+
+    @classmethod
+    def merge(cls, *results: _SimulationResult) -> _SimulationResult:
+        return cls(
+            mean_latency=sum((result.mean_latency for result in results), timedelta()) / len(results),
+            median_latency=sorted((result.median_latency for result in results))[(len(results) - 1) // 2],
+            request_count=sum(result.request_count for result in results),
+            error_count=sum(result.error_count for result in results)
+        )
 
 
 async def _simulate_view_pan(
@@ -72,7 +90,7 @@ async def _simulate_view_pan(
         step_size: timedelta | None = None,
         steps=30,
         interval=timedelta(milliseconds=200)
-) -> tuple[timedelta, int]:
+) -> _SimulationResult:
     if step_size is None:
         step_size = view_size * 0.6
         measurements = deque()
@@ -90,14 +108,19 @@ async def _simulate_view_pan(
         measurements = await asyncio.gather(*measurements, return_exceptions=True)
         latencies = deque()
         for measurement in measurements:
-            if not isinstance(measurement, timedelta):
+            if isinstance(measurement, BaseException):
                 _logger.error(
                     f'Encountered exception during request:',
                     exc_info=(type(measurement), measurement, measurement.__traceback__)
                 )
                 continue
             latencies.append(measurement)
-        return _mean_timedelta(latencies), len(measurements) - len(latencies)
+        return _SimulationResult(
+            mean_latency=timedelta(seconds=statistics.mean(latencies)),
+            median_latency=timedelta(seconds=statistics.median(latencies)),
+            request_count=len(measurements),
+            error_count=len(measurements) - len(latencies)
+        )
 
 
 async def _simulate_viewer(
@@ -105,23 +128,20 @@ async def _simulate_viewer(
         seed: int | None = None,
         pans=10,
         pan_kwargs: dict | None = None
-) -> tuple[timedelta, int]:
+) -> _SimulationResult:
     if pan_kwargs is None:
         pan_kwargs = {}
     random = np.random.default_rng(seed=seed)
     range_size = flux_range[1] - flux_range[0]
-    error_count = 0
-    latencies = deque()
+    results = deque()
     async with ClientSession(base_url) as session:
         for _ in range(pans):
             pan_start = flux_range[0] + range_size * random.random()
             view_size = range_size * min(random.lognormal() / 40, 1.5)
-            latency, pan_error_count = await _simulate_view_pan(
+            results.append(await _simulate_view_pan(
                 session, pan_start, view_size, **pan_kwargs
-            )
-            latencies.append(latency)
-            error_count += pan_error_count
-    return _mean_timedelta(latencies), error_count
+            ))
+    return _SimulationResult.merge(*results)
 
 
 async def _simulate_viewer_group(
@@ -129,7 +149,7 @@ async def _simulate_viewer_group(
         viewers=100,
         seed: int | None = None,
         viewer_kwargs: dict | None = None
-) -> tuple[timedelta, int]:
+) -> _SimulationResult:
     if viewer_kwargs is None:
         viewer_kwargs = {}
     results = await asyncio.gather(*(
@@ -140,11 +160,10 @@ async def _simulate_viewer_group(
         )
         for i_viewer in range(viewers)
     ))
-    latencies, error_counts = zip(*results)
-    return _mean_timedelta(latencies), sum(error_counts)
+    return _SimulationResult.merge(*results)
 
 
-def _simulate_viewer_group_sync(*args, **kwargs) -> tuple[timedelta, int]:
+def _simulate_viewer_group_sync(*args, **kwargs) -> _SimulationResult:
     return asyncio.run(_simulate_viewer_group(*args, **kwargs))
 
 
@@ -154,7 +173,7 @@ def _simulate_viewer_groups(
         group_size=100,
         seed: int | None = None,
         viewer_kwargs: dict | None = None
-) -> tuple[timedelta, int]:
+) -> _SimulationResult:
     groups = math.ceil(viewers / group_size)
     with Pool(processes=groups) as pool:
         results = [
@@ -165,8 +184,7 @@ def _simulate_viewer_groups(
             })
             for i_group in range(groups)
         ]
-        latencies, error_counts = zip(*(result.get() for result in results))
-    return _mean_timedelta(latencies), sum(error_counts)
+        return _SimulationResult.merge(*(result.get() for result in results))
 
 
 app = Typer()
@@ -186,14 +204,24 @@ async def benchmark(base_url: str, viewers: int, seed: int | None):
     async with ClientSession(base_url) as session:
         flux_range = await _fetch_flux_range_definitive(session)
     _logger.info(f'Simulating {viewers} constantly panning users.')
-    latency, error_count = _simulate_viewer_groups(
+    start_time = datetime.now()
+    result = _simulate_viewer_groups(
         base_url,
         flux_range,
         viewers=viewers,
         seed=seed
     )
-    _logger.info(f'Average latency was {latency.total_seconds() * 1000:.3f}ms.')
-    _logger.info(f'Encountered {error_count} errors.')
+    end_time = datetime.now()
+    simulation_duration = end_time - start_time
+
+    _logger.info(f'Benchmark took {simulation_duration}.')
+    _logger.info(f'Mean latency was {result.mean_latency.total_seconds() * 1000:.3f}ms.')
+    _logger.info(f'Median latency was {result.median_latency.total_seconds() * 1000:.3f}ms.')
+    _logger.info(f'Encountered {result.error_count} errors.')
+    _logger.info(f'Made {result.request_count} requests.')
+    # Normal user makes ~1 request per second
+    normal_viewers = result.request_count / simulation_duration.total_seconds()
+    _logger.info(f'Equivalent to ~{normal_viewers:.1f} users.')
 
 
 if __name__ == "__main__":
