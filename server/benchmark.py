@@ -137,8 +137,8 @@ async def _simulate_viewer(
     results = deque()
     async with ClientSession() as session:
         for _ in range(pans):
-            pan_start = flux_range[0] + range_size * random.random()
             view_size = range_size * min(random.lognormal() / 40, 1.5)
+            pan_start = flux_range[0] + range_size * random.random() - view_size / 2
             results.append(await _simulate_view_pan(
                 session, base_url, pan_start, view_size, **pan_kwargs
             ))
@@ -194,7 +194,7 @@ app = Typer()
 @app.command()
 def _benchmark(
         base_url: Annotated[str, Argument()] = 'http://localhost:8000',
-        viewers: int = 100,
+        viewers: int = 50,
         seed: int = None
 ):
     asyncio.run(benchmark(base_url, viewers, seed))
