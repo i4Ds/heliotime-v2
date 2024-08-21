@@ -1,14 +1,15 @@
 import asyncio
+import itertools
 from collections import deque
 from datetime import datetime, timedelta
-from typing import Optional, cast
+from typing import Optional, cast, Awaitable
 
 import asyncpg
 import pandas as pd
 
-from data.flux.access import fetch_flux_timestamp_range, fetch_flux
+from data.flux.access import fetch_flux_timestamp_range, fetch_flux, fetch_raw_flux
 from data.flux.source import FluxSource
-from data.flux.spec import Flux, empty_flux
+from data.flux.spec import Flux, empty_flux, RawFlux
 
 
 class FluxFetcher:
@@ -57,12 +58,12 @@ class FluxFetcher:
             self.start = start
             self.end = end
 
-    async def fetch(
+    def _fetch_sections(
             self,
+            fetch_function: type[fetch_flux] | type[fetch_raw_flux],
             start: datetime, end: datetime,
             interval: timedelta, timeout: Optional[timedelta] = None
-    ) -> Flux:
-        # async with self._pool.acquire() as connection:
+    ) -> Awaitable[tuple]:
         section_start = start
         sections = deque()
         for source in self._SOURCES:
@@ -72,16 +73,34 @@ class FluxFetcher:
             if end < source_range[0]:
                 break
             section_end = min(source_range[1], end)
-            sections.append(fetch_flux(
+            sections.append(fetch_function(
                 self._pool, source, interval,
                 section_start, section_end, timeout
             ))
             if end <= source_range[1]:
                 break
             section_start = section_end
-        if len(sections) == 0:
-            return empty_flux()
-        return cast(pd.Series, pd.concat(await asyncio.gather(*sections)))
+        return asyncio.gather(*sections)
+
+    async def fetch(
+            self,
+            start: datetime, end: datetime,
+            interval: timedelta, timeout: Optional[timedelta] = None
+    ) -> Flux:
+        sections = await self._fetch_sections(fetch_flux, start, end, interval, timeout)
+        return (
+            empty_flux()
+            if len(sections) == 0 else
+            cast(pd.Series, pd.concat(sections))
+        )
+
+    async def fetch_raw(
+            self,
+            start: datetime, end: datetime,
+            interval: timedelta, timeout: Optional[timedelta] = None
+    ) -> RawFlux:
+        sections = await self._fetch_sections(fetch_raw_flux, start, end, interval, timeout)
+        return itertools.chain.from_iterable(sections)
 
     def cancel(self):
         self._update_task.cancel()

@@ -1,12 +1,10 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import cast, Optional
+from typing import Optional
 
 import asyncpg
-from asyncpg.pgproto.pgproto import timedelta
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pandas import Timestamp
 from pydantic import BaseModel
 
 from config import FLUX_QUERY_TIMEOUT, FLUX_MAX_RESOLUTION, ONLY_API
@@ -78,13 +76,10 @@ async def get_flux(
     resolution = min(max(resolution, 1), FLUX_MAX_RESOLUTION)
     interval = (end - start) / resolution
     try:
-        series = await flux_fetcher.fetch(start, end, interval, FLUX_QUERY_TIMEOUT)
+        series = await flux_fetcher.fetch_raw(start, end, interval, FLUX_QUERY_TIMEOUT)
     except TimeoutError:
         raise HTTPException(503, 'Query took too long to execute.')
-    return [
-        (cast(Timestamp, timestamp).timestamp() * 1000, flux)
-        for timestamp, flux in series.items()
-    ]
+    return list(series)
 
 
 class Status(BaseModel):

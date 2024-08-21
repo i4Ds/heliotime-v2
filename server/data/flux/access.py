@@ -1,11 +1,49 @@
 from datetime import timedelta, datetime, timezone
-from typing import Optional
+from typing import Optional, Awaitable, Callable, cast
 
 import pandas as pd
 from asyncpg import Connection, Pool
 
 from data.flux.source import AUTO_REFRESH_SLACK, FluxSource
-from data.flux.spec import empty_flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux
+from data.flux.spec import empty_flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, RawFlux
+
+
+def _select_flux(
+        connection: Connection | Pool,
+        time_component: Callable[[str], str],
+        source: FluxSource,
+        interval: timedelta,
+        start: datetime,
+        end: datetime,
+        timeout: Optional[timedelta] = None,
+) -> Awaitable[list]:
+    timeout_seconds = None if timeout is None else timeout.total_seconds()
+    if interval < source.raw_resolution:
+        return connection.fetch(
+            f'''
+                SELECT {time_component('time')} AS time, flux
+                FROM {source.table_name}
+                WHERE $1 <= time AND time < $2
+                ORDER BY time
+            ''',
+            start, end,
+            timeout=timeout_seconds
+        )
+    return connection.fetch(
+        f'''
+                WITH downscale AS(
+                    SELECT time_bucket($1, time) AS bucket, MAX(flux) AS flux
+                    FROM {source.select_relation(interval)}
+                    WHERE $2 <= time AND time < $3
+                    GROUP BY bucket
+                ) 
+                SELECT {time_component('bucket')} AS time, flux
+                FROM downscale
+                ORDER BY bucket
+            ''',
+        interval, start, end,
+        timeout=timeout_seconds
+    )
 
 
 async def fetch_flux(
@@ -16,35 +54,31 @@ async def fetch_flux(
         end: datetime,
         timeout: Optional[timedelta] = None,
 ) -> Flux:
-    timeout_seconds = None if timeout is None else timeout.total_seconds()
-    records = await (
-        connection.fetch(
-            f'''
-            SELECT time, flux
-            FROM {source.table_name}
-            WHERE $1 <= time AND time < $2
-            ORDER BY time
-        ''',
-            start, end,
-            timeout=timeout_seconds
-        )
-        if interval < source.raw_resolution else
-        connection.fetch(
-            f'''
-            SELECT time_bucket($1, time) AS bucket, MAX(flux)
-            FROM {source.select_relation(interval)}
-            WHERE $2 <= time AND time < $3
-            GROUP BY bucket
-            ORDER BY bucket
-        ''',
-            interval, start, end,
-            timeout=timeout_seconds
-        )
+    records = await _select_flux(
+        connection,
+        lambda column: column,
+        source, interval, start, end, timeout
     )
     return empty_flux() if len(records) == 0 else pd.DataFrame(
         records,
         columns=[FLUX_INDEX_NAME, FLUX_VALUE_NAME]
     ).set_index(FLUX_INDEX_NAME)[FLUX_VALUE_NAME]
+
+
+async def fetch_raw_flux(
+        connection: Connection | Pool,
+        source: FluxSource,
+        interval: timedelta,
+        start: datetime,
+        end: datetime,
+        timeout: Optional[timedelta] = None,
+) -> RawFlux:
+    records = await _select_flux(
+        connection,
+        lambda column: f'(EXTRACT(EPOCH FROM {column}) * 1000)::BIGINT',
+        source, interval, start, end, timeout
+    )
+    return cast(RawFlux, map(tuple, records))
 
 
 async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
