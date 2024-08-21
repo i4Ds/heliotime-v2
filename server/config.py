@@ -15,3 +15,6 @@ IMPORT_START = datetime.fromisoformat(os.environ['IMPORT_START']).astimezone(tim
 
 FLUX_MAX_RESOLUTION = int(os.environ.get('FLUX_MAX_RESOLUTION', 2000))
 FLUX_QUERY_TIMEOUT = timedelta(seconds=float(os.environ.get('FLUX_QUERY_TIMEOUT', 30)))
+
+# Used when running api in Gunicorn workers
+ONLY_API = os.environ.get('ONLY_API', '').lower() == 'true'

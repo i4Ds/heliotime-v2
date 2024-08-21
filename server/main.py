@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pandas import Timestamp
 from pydantic import BaseModel
 
-from config import FLUX_QUERY_TIMEOUT, FLUX_MAX_RESOLUTION
+from config import FLUX_QUERY_TIMEOUT, FLUX_MAX_RESOLUTION, ONLY_API
 from data.db import create_db_pool, apply_db_migrations
 from data.flux.fetcher import FluxFetcher
 from data.flux.spec import empty_flux
@@ -25,12 +25,15 @@ flux_fetcher: FluxFetcher
 async def lifespan(_app: FastAPI):
     global db_pool, flux_fetcher
     configure_logging()
-    apply_db_migrations()
 
-    archive_importer = ArchiveImporterProcess()
-    archive_importer.start()
-    live_importer = LiveImporterProcess()
-    live_importer.start()
+    archive_importer = None
+    live_importer = None
+    if not ONLY_API:
+        apply_db_migrations()
+        archive_importer = ArchiveImporterProcess()
+        archive_importer.start()
+        live_importer = LiveImporterProcess()
+        live_importer.start()
 
     db_pool = await create_db_pool()
     flux_fetcher = FluxFetcher(db_pool)
@@ -40,8 +43,9 @@ async def lifespan(_app: FastAPI):
     flux_fetcher.cancel()
     await db_pool.close()
 
-    archive_importer.kill()
-    live_importer.kill()
+    if not ONLY_API:
+        archive_importer.kill()
+        live_importer.kill()
 
 
 app = FastAPI(lifespan=lifespan)

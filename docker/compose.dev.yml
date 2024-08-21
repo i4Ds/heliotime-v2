@@ -2,6 +2,12 @@ services:
   db:
     environment:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-heliotime}
-  server:
+  migration:
+    environment:
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-heliotime}
+  importer:
+    environment:
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-heliotime}
+  api:
     environment:
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-heliotime}

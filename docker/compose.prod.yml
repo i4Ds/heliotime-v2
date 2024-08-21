@@ -2,7 +2,14 @@ services:
   db:
     environment:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Database password not specified}
-  server:
+  migration:
+    environment:
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:?Database password not specified}
+  importer:
+    restart: unless-stopped
+    environment:
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:?Database password not specified}
+  api:
     restart: unless-stopped
     environment:
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:?Database password not specified}

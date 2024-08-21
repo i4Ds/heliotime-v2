@@ -60,6 +60,7 @@ The Docker Compose deployment, site, and server can be configured using the foll
 |           `IMPORT_START`            |      now - 30 days      |     same     | From when to import data in ISO format.                                                       |
 |        `FLUX_MAX_RESOLUTION`        |         `2000`          |     same     | Max flux resolution allowed to be requested. Bigger request will be downsized.                |
 |        `FLUX_QUERY_TIMEOUT`         |          `30`           |     same     | Timeout of flux database queries before giving up.                                            |
+|          `WEB_CONCURRENCY`          |           `1`           |     same     | Worker count handling API requests. Optional around `2 x CPU`.                                |
 |        `NEXT_PUBLIC_API_URL`        | `http://localhost:8000` |     same     | URL used by the browser to access the API.                                                    |
 
 Docker Compose automatically loads `.env` in the repository root and the site (Next.js) does the same for `site/.env.local` when running on the host.

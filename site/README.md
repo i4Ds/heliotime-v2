@@ -4,11 +4,11 @@ The Next.js server serving an interactive graph of the flux data and a Helioview
 
 ## Getting Started
 
-Ensure you have [Node.js](https://nodejs.org/) and [Yarn](https://classic.yarnpkg.com) installed and the server and database are running:
+Ensure you have [Node.js](https://nodejs.org/) and [Yarn](https://classic.yarnpkg.com) installed and the server components and database are running:
 
 ```sh
 # Run in repository root (../)
-./du.sh dev deploy db server
+./du.sh dev deploy db api importer
 ```
 
 First, build the Visx submodule:

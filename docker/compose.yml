@@ -5,7 +5,11 @@ services:
     healthcheck:
       # Do not use pg_isready because it throws errors
       # See: https://github.com/peter-evans/docker-compose-healthcheck/issues/16#issuecomment-1402807860
-      test: ['CMD-SHELL', 'psql -h localhost -U $${POSTGRES_USER} -c select 1 -d $${POSTGRES_DB}']
+      test:
+        [
+          "CMD-SHELL",
+          "psql -h localhost -U $${POSTGRES_USER} -c select 1 -d $${POSTGRES_DB}",
+        ]
       start_period: 10s
       interval: 10s
       retries: 10
@@ -14,24 +18,62 @@ services:
     environment:
       - POSTGRES_USER=${DATABASE_USERNAME:-postgres}
       - POSTGRES_DB=${DATABASE_DATABASE:-postgres}
-  server:
+  migration:
     build:
       context: ./server
-    ports:
-      - ${API_PORT:-8000}:8000
+    command: ["-m", "alembic", "upgrade", "head"]
     depends_on:
       db:
-        condition: service_healthy
         restart: true
+        condition: service_healthy
     environment:
       - DATABASE_HOST=${DATABASE_HOST:-db}
       - DATABASE_PORT=${DATABASE_PORT:-5432}
       - DATABASE_DATABASE=${DATABASE_DATABASE:-postgres}
       - DATABASE_USERNAME=${DATABASE_USERNAME:-postgres}
       - DATABASE_MEMORY_GB
+  importer:
+    build:
+      context: ./server
+    command: ["import.py", "--skip-migrations", "all"]
+    depends_on:
+      migration:
+        restart: true
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_HOST=${DATABASE_HOST:-db}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_DATABASE=${DATABASE_DATABASE:-postgres}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-postgres}
       - IMPORT_START
+  api:
+    build:
+      context: ./server
+    command:
+      [
+        "-m",
+        "gunicorn",
+        "main:app",
+        "--worker-class",
+        "uvicorn.workers.UvicornWorker",
+        "--bind",
+        "0.0.0.0:8000",
+      ]
+    ports:
+      - ${API_PORT:-8000}:8000
+    depends_on:
+      migration:
+        restart: true
+        condition: service_completed_successfully
+    environment:
+      - ONLY_API=true
+      - DATABASE_HOST=${DATABASE_HOST:-db}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_DATABASE=${DATABASE_DATABASE:-postgres}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-postgres}
       - FLUX_MAX_RESOLUTION
       - FLUX_QUERY_TIMEOUT
+      - WEB_CONCURRENCY
   site:
     build:
       context: ./site
@@ -40,4 +82,4 @@ services:
     ports:
       - ${SITE_PORT:-3000}:3000
     depends_on:
-      - server
+      - api
