@@ -5,7 +5,7 @@ from alembic import command
 from alembic.config import Config
 from asyncpg import Connection, Pool
 
-from config import DATABASE_URL
+from config import DATABASE_URL, DATABASE_POOL_SIZE
 
 
 def apply_db_migrations():
@@ -17,4 +17,8 @@ def connect_db() -> Awaitable[Connection]:
 
 
 def create_db_pool() -> Pool:
-    return asyncpg.create_pool(DATABASE_URL)
+    return asyncpg.create_pool(
+        DATABASE_URL,
+        max_size=DATABASE_POOL_SIZE,
+        min_size=min(10, DATABASE_POOL_SIZE)
+    )

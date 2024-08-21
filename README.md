@@ -56,6 +56,7 @@ The Docker Compose deployment, site, and server can be configured using the foll
 |         `DATABASE_DATABASE`         |       `postgres`        |     same     | Name of the database to use.                                                                  |
 |         `DATABASE_USERNAME`         |       `postgres`        |     same     | Username to authenticate with the database.                                                   |
 |         `DATABASE_PASSWORD`         |       `heliotime`       |      -       | Password to authenticate with the database.                                                   |
+|        `DATABASE_POOL_SIZE`         |          `10`           |     same     | Amount of database connections a single worker has available.                                 |
 |        `DATABASE_MEMORY_GB`         |          `28`           |     same     | GB of memory available to the database. Used by migrations to optimize chunk and cache sizes. |
 |           `IMPORT_START`            |      now - 30 days      |     same     | From when to import data in ISO format.                                                       |
 |        `FLUX_MAX_RESOLUTION`        |         `2000`          |     same     | Max flux resolution allowed to be requested. Bigger request will be downsized.                |
