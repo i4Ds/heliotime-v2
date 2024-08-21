@@ -22,8 +22,8 @@ _logger = logging.getLogger(f'benchmarker')
 Range = tuple[datetime, datetime]
 
 
-async def _fetch_flux_range(session: ClientSession) -> Range | None:
-    response = await session.get('/status')
+async def _fetch_flux_range(session: ClientSession, base_url: str) -> Range | None:
+    response = await session.get(base_url + '/status')
     response.raise_for_status()
     json = await response.json()
     if json['start'] is None or json['end'] is None:
@@ -36,11 +36,12 @@ async def _fetch_flux_range(session: ClientSession) -> Range | None:
 
 async def _fetch_flux_range_definitive(
         session: ClientSession,
+        base_url: str,
         tries=10,
         wait=timedelta(seconds=5)
 ) -> Range:
     for _ in range(tries):
-        flux_range = await _fetch_flux_range(session)
+        flux_range = await _fetch_flux_range(session, base_url)
         if flux_range is not None:
             return flux_range
         _logger.warning(f'Benchmark target is initializing or has not data. Retrying in {wait}')
@@ -49,8 +50,8 @@ async def _fetch_flux_range_definitive(
     raise ValueError('Benchmark target did not become ready.')
 
 
-async def _fetch_flux(session: ClientSession, start: datetime, end: datetime) -> ClientResponse:
-    return await session.get('/flux', params={
+async def _fetch_flux(session: ClientSession, base_url: str, start: datetime, end: datetime) -> ClientResponse:
+    return await session.get(base_url + '/flux', params={
         'resolution': FLUX_MAX_RESOLUTION,
         'start': start.isoformat(),
         'end': end.isoformat()
@@ -85,6 +86,7 @@ class _SimulationResult:
 
 async def _simulate_view_pan(
         session: ClientSession,
+        base_url: str,
         start: datetime,
         view_size: timedelta,
         step_size: timedelta | None = None,
@@ -93,34 +95,33 @@ async def _simulate_view_pan(
 ) -> _SimulationResult:
     if step_size is None:
         step_size = view_size * 0.6
-        measurements = deque()
-        view_start = start
-        for step in range(steps):
-            view_end = view_start + step_size
-            measurement = _measure_request(
-                lambda: _fetch_flux(session, view_start, view_end)
-            )
-            measurements.append(asyncio.create_task(measurement))
-            if step == steps - 1:
-                break
-            view_start = view_end
-            await asyncio.sleep(interval.total_seconds())
-        measurements = await asyncio.gather(*measurements, return_exceptions=True)
-        latencies = deque()
-        for measurement in measurements:
-            if isinstance(measurement, BaseException):
-                _logger.error(
-                    f'Encountered exception during request:',
-                    exc_info=(type(measurement), measurement, measurement.__traceback__)
-                )
-                continue
-            latencies.append(measurement)
-        return _SimulationResult(
-            mean_latency=timedelta(seconds=statistics.mean(latencies)),
-            median_latency=timedelta(seconds=statistics.median(latencies)),
-            request_count=len(measurements),
-            error_count=len(measurements) - len(latencies)
+    measurements = deque()
+    view_start = start
+    for step in range(steps):
+        measurement = _measure_request(
+            lambda: _fetch_flux(session, base_url, view_start, view_start + view_size)
         )
+        measurements.append(asyncio.create_task(measurement))
+        if step == steps - 1:
+            break
+        view_start = view_start + step_size
+        await asyncio.sleep(interval.total_seconds())
+    measurements = await asyncio.gather(*measurements, return_exceptions=True)
+    latencies = deque()
+    for measurement in measurements:
+        if isinstance(measurement, BaseException):
+            _logger.error(
+                f'Encountered exception during request:',
+                exc_info=(type(measurement), measurement, measurement.__traceback__)
+            )
+            continue
+        latencies.append(measurement)
+    return _SimulationResult(
+        mean_latency=timedelta(seconds=statistics.mean(latencies)),
+        median_latency=timedelta(seconds=statistics.median(latencies)),
+        request_count=len(measurements),
+        error_count=len(measurements) - len(latencies)
+    )
 
 
 async def _simulate_viewer(
@@ -134,12 +135,12 @@ async def _simulate_viewer(
     random = np.random.default_rng(seed=seed)
     range_size = flux_range[1] - flux_range[0]
     results = deque()
-    async with ClientSession(base_url) as session:
+    async with ClientSession() as session:
         for _ in range(pans):
             pan_start = flux_range[0] + range_size * random.random()
             view_size = range_size * min(random.lognormal() / 40, 1.5)
             results.append(await _simulate_view_pan(
-                session, pan_start, view_size, **pan_kwargs
+                session, base_url, pan_start, view_size, **pan_kwargs
             ))
     return _SimulationResult.merge(*results)
 
@@ -193,16 +194,18 @@ app = Typer()
 @app.command()
 def _benchmark(
         base_url: Annotated[str, Argument()] = 'http://localhost:8000',
-        viewers: int = 200,
+        viewers: int = 100,
         seed: int = None
 ):
     asyncio.run(benchmark(base_url, viewers, seed))
 
 
 async def benchmark(base_url: str, viewers: int, seed: int | None):
+    if base_url.endswith('/'):
+        base_url = base_url[:-1]
     _logger.info(f'Benchmarking {base_url}')
-    async with ClientSession(base_url) as session:
-        flux_range = await _fetch_flux_range_definitive(session)
+    async with ClientSession() as session:
+        flux_range = await _fetch_flux_range_definitive(session, base_url)
     _logger.info(f'Simulating {viewers} constantly panning users.')
     start_time = datetime.now()
     result = _simulate_viewer_groups(
