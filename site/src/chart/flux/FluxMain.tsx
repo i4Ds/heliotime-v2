@@ -1,4 +1,4 @@
-import { FluxMeasurement, useStableDebouncedFlux } from '@/api/flux';
+import { FluxMeasurement } from '@/api/flux/data';
 import { AxisBottom, AxisLeft, TickRendererProps } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
@@ -14,6 +14,7 @@ import { PointerStack } from '@/utils/pointer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
 import { colors, font, textSize } from '@/app/theme';
 import { Text } from '@visx/text';
+import { useStableDebouncedFlux } from '@/api/flux/useFlux';
 import { View, formatTime, formatWatt, timeExtent, wattExtent } from './flux';
 import { PositionSizeProps } from '../base';
 import Brush, { BrushView } from '../Brush';

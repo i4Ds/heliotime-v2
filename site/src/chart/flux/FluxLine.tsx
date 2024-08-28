@@ -1,4 +1,4 @@
-import { FluxSections } from '@/api/flux';
+import { FluxSections } from '@/api/flux/data';
 import { curveMonotoneX } from '@visx/curve';
 import { ScaleLogarithmic, ScaleTime } from 'd3-scale';
 import { LinePath } from '@visx/shape';

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParentSize } from '@visx/responsive';
 import { useQuery } from '@tanstack/react-query';
-import { useFluxRangeQuery } from '@/api/flux';
+import { fluxRangeQueryOptions } from '@/api/flux/useFluxRange';
 import { NumberRange } from '@/utils/range';
 import { limitView, panView } from '@/utils/panZoom';
 import { useVolatileState } from '@/utils/useVolatile';
@@ -78,7 +78,7 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   useEffect(() => setFollowView(24 * 60 * 60 * 1000), []);
 
   // Update end with server reported end date
-  const { data: dataRange } = useQuery(useFluxRangeQuery());
+  const { data: dataRange } = useQuery(fluxRangeQueryOptions());
   useEffect(() => {
     if (dataRange === undefined) return;
     setRange([dataRange[0], Date.now()]);

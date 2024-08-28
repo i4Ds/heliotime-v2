@@ -1,4 +1,4 @@
-import { useStableDebouncedFlux } from '@/api/flux';
+import { useStableDebouncedFlux } from '@/api/flux/useFlux';
 import { AxisTop } from '@visx/axis';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
