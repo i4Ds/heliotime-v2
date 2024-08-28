@@ -2,14 +2,13 @@ import { useStableDebouncedFlux } from '@/api/flux';
 import { AxisTop } from '@visx/axis';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
-import { LinePath } from '@visx/shape';
 import { useMemo } from 'react';
 import { NumberRange } from '@/utils/range';
 import { colors, font, textSize } from '@/app/theme';
-import { curveMonotoneX } from '@visx/curve';
 import { PositionSizeProps } from '../base';
 import { wattExtent, View, formatTimeOnlyDate } from './flux';
 import Brush from '../Brush';
+import FluxLine from './FluxLine';
 
 const CHART_Y_PADDING = 2;
 const BACKDROP_PADDING = 0.15;
@@ -53,7 +52,7 @@ export default function FluxBrush({
     () =>
       scaleLog({
         range: [height - 2 * CHART_Y_PADDING, CHART_Y_PADDING],
-        domain: wattExtent(data, 0.05),
+        domain: wattExtent(data.flat(), 0.05),
         clamp: true,
       }),
     [height, data]
@@ -93,13 +92,7 @@ export default function FluxBrush({
         </filter>
       </defs>
       <GridColumns scale={timeScale} height={height} numTicks={8} stroke={colors.bg[1]} />
-      <LinePath
-        curve={curveMonotoneX}
-        data={data}
-        x={(d) => timeScale(d[0])}
-        y={(d) => wattScale(d[1])}
-        stroke={colors.primary.DEFAULT}
-      />
+      <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
       <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
       <AxisTop
         top={height}

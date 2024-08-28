@@ -3,7 +3,7 @@ import { AxisBottom, AxisLeft, TickRendererProps } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
-import { Circle, Line, LinePath } from '@visx/shape';
+import { Circle, Line } from '@visx/shape';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
 import { Dispatch, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,12 +13,12 @@ import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
 import { colors, font, textSize } from '@/app/theme';
-import { curveMonotoneX } from '@visx/curve';
 import { Text } from '@visx/text';
 import { View, formatTime, formatWatt, timeExtent, wattExtent } from './flux';
 import { PositionSizeProps } from '../base';
 import Brush, { BrushView } from '../Brush';
 import FlareClassBands from './FlareClassBands';
+import FluxLine from './FluxLine';
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
   return (
@@ -66,24 +66,25 @@ export function FluxMain({
   setView,
 }: FluxMainProps) {
   const data = useStableDebouncedFlux(view[0], view[1], width);
+  const series = useMemo(() => data.flat(), [data])
 
   const timeScale = useMemo(
     () =>
       scaleUtc({
         range: [0, width],
-        domain: view === undefined ? timeExtent(data) : Array.from(view),
+        domain: view === undefined ? timeExtent(series) : Array.from(view),
       }),
-    [data, view, width]
+    [series, view, width]
   );
 
   const wattScale = useMemo(
     () =>
       scaleLog({
         range: [height, 0],
-        domain: lockWattAxis ? [1e-9, 1e-2] : wattExtent(data, 0.1),
+        domain: lockWattAxis ? [1e-9, 1e-2] : wattExtent(series, 0.1),
         clamp: true,
       }),
-    [data, height, lockWattAxis]
+    [height, lockWattAxis, series]
   );
 
   const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
@@ -96,16 +97,16 @@ export function FluxMain({
       return;
     }
     const index = bisector<FluxMeasurement, number>((m) => m[0]).center(
-      data,
+      series,
       timeScale.invert(tooltipPoint.x).getTime()
     );
-    const measurement = data[index];
+    const measurement = series[index];
     showTooltip({
       tooltipData: measurement,
       tooltipLeft: timeScale(measurement[0]),
       tooltipTop: tooltipPoint.y,
     });
-  }, [data, hideTooltip, showTooltip, timeScale, tooltipPoint]);
+  }, [data, hideTooltip, series, showTooltip, timeScale, tooltipPoint]);
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGElement>) => {
@@ -223,13 +224,7 @@ export function FluxMain({
       <svg ref={tooltipContainerRef} />
       <FlareClassBands width={width} height={height} scale={wattScale} />
       <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
-      <LinePath
-        curve={curveMonotoneX}
-        data={data}
-        x={(d) => timeScale(d[0])}
-        y={(d) => wattScale(d[1])}
-        className="stroke-primary"
-      />
+      <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
       <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
       <AxisBottom
         top={height}

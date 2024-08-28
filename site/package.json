@@ -29,6 +29,7 @@
     "@visx/tooltip": "^3.3.0",
     "d3-array": "^3.2.4",
     "d3-interpolate": "^3.0.1",
+    "d3-scale": "^4.0.2",
     "next": "14.2.4",
     "react": "^18",
     "react-dom": "^18",
