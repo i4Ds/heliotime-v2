@@ -1,4 +1,4 @@
-import { FluxSeries } from '@/api/flux';
+import { FluxSeries } from '@/api/flux/data';
 import { NumberRange } from '@/utils/range';
 import { toSuperScript } from '@/utils/super';
 import { TickFormatter } from '@visx/axis';
