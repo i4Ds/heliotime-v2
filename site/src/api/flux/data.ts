@@ -22,7 +22,7 @@ export function selectFluxSections(
   const filteredSections = sections.slice(firstInclusive, lastExclusive);
   return filteredSections.map((section, index) =>
     // Only first and last section needs to be clipped
-    index !== 0 && index !== filteredSections.length ? section : selectFlux(section, start, end)
+    index !== 0 && index !== filteredSections.length - 1 ? section : selectFlux(section, start, end)
   );
 }
 
