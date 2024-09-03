@@ -8,15 +8,17 @@ import { createParser } from 'nuqs';
 
 export type View = Readonly<NumberRange>;
 
+const DEFAULT_VIEW_SIZE_MS = 24 * 60 * 60 * 1000;
+
 export const parseAsView = createParser<View>({
   parse(value) {
-    const [start, end] = value.split(',').map((v) => Date.parse(v));
+    const [start, end] = value.split('~').map((v) => Date.parse(v));
     // eslint-disable-next-line unicorn/no-null
-    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-    return [start, end];
+    if (!Number.isFinite(start)) return null;
+    return [start, Number.isFinite(end) ? end : start + DEFAULT_VIEW_SIZE_MS];
   },
   serialize(view) {
-    return view.map((date) => new Date(date).toISOString()).join(',');
+    return view.map((date) => new Date(date).toISOString()).join('~');
   },
 });
 
