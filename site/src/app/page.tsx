@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import FluxChart from '@/chart/flux/FluxChart';
 import { parseAsIsoDateTime, useQueryState } from 'nuqs';
 import HelioView from './HelioView';
 
-export const dynamic = 'force-static';
-
-export default function Home() {
+function Home() {
   const [timestamp, setTimestamp] = useQueryState('date', parseAsIsoDateTime);
   useEffect(() => {
     if (timestamp !== null) return;
@@ -23,5 +21,13 @@ export default function Home() {
         onTimeSelect={setTimestamp}
       />
     </main>
+  );
+}
+
+export default function SuspenseHome() {
+  return (
+    <Suspense>
+      <Home />
+    </Suspense>
   );
 }
