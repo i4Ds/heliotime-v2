@@ -4,8 +4,21 @@ import { toSuperScript } from '@/utils/super';
 import { TickFormatter } from '@visx/axis';
 import { NumberLike } from '@visx/scale';
 import { extent } from 'd3-array';
+import { createParser } from 'nuqs';
 
 export type View = Readonly<NumberRange>;
+
+export const parseAsView = createParser<View>({
+  parse(value) {
+    const [start, end] = value.split(',').map((v) => Date.parse(v));
+    // eslint-disable-next-line unicorn/no-null
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    return [start, end];
+  },
+  serialize(view) {
+    return view.map((date) => new Date(date).toISOString()).join(',');
+  },
+});
 
 export function timeExtent(navData: FluxSeries | undefined): NumberRange | undefined {
   return (navData?.length ?? 0) === 0 ? undefined : [navData![0][0], Date.now()];

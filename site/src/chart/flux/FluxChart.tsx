@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fluxRangeQueryOptions } from '@/api/flux/useFluxRange';
 import { NumberRange } from '@/utils/range';
 import { limitView, panView } from '@/utils/panZoom';
-import { useVolatileState } from '@/utils/useVolatile';
+import { useVolatile, useVolatileState } from '@/utils/useVolatile';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faAngleLeft,
@@ -16,9 +16,12 @@ import {
 import { getHelioviewerUrl } from '@/api/helioviewer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
 import { useInterval } from '@/utils/useInterval';
+import { useQueryState } from 'nuqs';
 import { FluxMain } from './FluxMain';
 import FluxBrush from './FluxBrush';
-import { View } from './flux';
+import { parseAsView, View } from './flux';
+import ShareButton from './ShareButton';
+import IconButton from './IconButton';
 
 const CHART_TITLE = 'Solar Activity Timeline';
 const FOLLOW_FRONTRUN_PERCENT = 0.1;
@@ -39,7 +42,14 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   const brushHeight = height * 0.15;
 
   const [renderRange, getRange, setRange] = useVolatileState<NumberRange>([0, 0]);
-  const [renderView, getView, setRawView] = useVolatileState<View>(renderRange);
+  const [renderView, setRenderView] = useQueryState(
+    'view',
+    parseAsView.withDefault(renderRange).withOptions({
+      // Required by Safari (see throttleMs docs)
+      throttleMs: 120,
+    })
+  );
+  const [getView, setRawView] = useVolatile<View>(renderView, setRenderView);
   const [renderIsFollowing, getIsFollowing, setIsFollowing] = useVolatileState(true);
   const setUnlimitedView = useCallback(
     (newView: View) => {
@@ -74,8 +84,11 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   );
 
   // Set default view to 1 day look back
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => setFollowView(24 * 60 * 60 * 1000), []);
+  useEffect(() => {
+    if (renderView !== renderRange) return;
+    setFollowView(24 * 60 * 60 * 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Update end with server reported end date
   const { data: dataRange } = useQuery(fluxRangeQueryOptions());
@@ -99,7 +112,10 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
   });
 
   // Smooth panning logic
-  const [, getPanSpeed, setPanSpeed] = useVolatileState(0);
+  // Needs to be state to update the `useInterval` below.
+  const [, getPanSpeed, setRawPanSpeed] = useVolatileState(0);
+  const setPanDirection = (forward: boolean) => setRawPanSpeed(forward ? PAN_SPEED : -PAN_SPEED);
+  const stopPan = () => setRawPanSpeed(0);
   const setPanView = (relativeDelta: number) => {
     const view = getView();
     setView(panView(view, (view[1] - view[0]) * relativeDelta));
@@ -109,14 +125,14 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
     getPanSpeed() === 0 ? undefined : (deltaMs) => setPanView((getPanSpeed() * deltaMs) / 1000)
   );
   useWindowEvent('keydown', (event) => {
-    if (event.key === 'ArrowRight') setPanSpeed(PAN_SPEED);
-    if (event.key === 'ArrowLeft') setPanSpeed(-PAN_SPEED);
+    if (event.key === 'ArrowRight') setPanDirection(true);
+    if (event.key === 'ArrowLeft') setPanDirection(false);
   });
   useWindowEvent('keyup', (event) => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') setPanSpeed(0);
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') stopPan();
   });
-  useWindowEvent('pointerup', () => setPanSpeed(0))
-  useWindowEvent('pointercancel', () => setPanSpeed(0))
+  useWindowEvent('pointerup', () => stopPan());
+  useWindowEvent('pointercancel', () => stopPan());
 
   const viewerUrl = useMemo(() => selectedTime && getHelioviewerUrl(selectedTime), [selectedTime]);
   return (
@@ -154,9 +170,9 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
         </div>
         <h1 className="hidden sm:block overflow-x-auto text-nowrap select-text">{CHART_TITLE}</h1>
         <div className="flex-grow basis-0 flex items-center flex-row-reverse gap-2">
-          <button
+          <IconButton
+            icon={faAnglesRight}
             className={`btn-tiny ${renderIsFollowing ? 'btn-invert' : ''}`}
-            type="button"
             onClick={() => {
               setIsFollowing(!getIsFollowing());
               if (getIsFollowing() && getView()[1] < getRange()[1]) {
@@ -164,34 +180,32 @@ export default function FluxChart({ className, selectedTime, onTimeSelect }: Flu
                 setFollowView(view[1] - view[0]);
               }
             }}
-            aria-label="Follow live"
-          >
-            <FontAwesomeIcon icon={faAnglesRight} className="aspect-square" />
-          </button>
-          <button
+            title="Follow live"
+          />
+          <IconButton
+            icon={faAngleRight}
             className="hidden xs:block hmd:block btn-tiny"
-            type="button"
-            onPointerDown={() => setPanSpeed(PAN_SPEED)}
-            aria-label="Pan right"
-          >
-            <FontAwesomeIcon icon={faAngleRight} className="aspect-square" />
-          </button>
-          <button
+            onPointerDown={() => setPanDirection(true)}
+            title="Pan right"
+          />
+          <IconButton
+            icon={faAngleLeft}
             className="hidden xs:block hmd:block btn-tiny"
-            type="button"
-            onPointerDown={() => setPanSpeed(-PAN_SPEED)}
-            aria-label="Pan left"
-          >
-            <FontAwesomeIcon icon={faAngleLeft} className="aspect-square" />
-          </button>
-          <button
+            onPointerDown={() => setPanDirection(false)}
+            title="Pan left"
+          />
+          <IconButton
+            icon={faArrowDownUpLock}
+            square={false}
             className={`block btn-tiny ${lockWattAxis ? 'btn-invert' : ''}`}
-            type="button"
             onClick={() => setLockWattAxis(!lockWattAxis)}
-            aria-label="Lock watt axis"
-          >
-            <FontAwesomeIcon icon={faArrowDownUpLock} />
-          </button>
+            title="Lock watt axis"
+          />
+          <ShareButton
+            className="btn-tiny"
+            data={() => ({ url: window.location.href, title: 'Heliotime' })}
+            title="Share view"
+          />
           {viewerUrl && (
             <a
               className="hmd:hidden btn btn-tiny btn-primary text-nowrap"

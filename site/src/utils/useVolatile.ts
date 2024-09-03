@@ -10,7 +10,7 @@ import { useCallback, useRef, useState } from 'react';
  */
 export function useVolatile<Value>(
   value: Value,
-  setter: (value: Value) => void
+  setter: ((value: Value) => void) | undefined = undefined
 ): [get: () => Value, set: (value: Value) => void, sync: () => void] {
   const volatile = useRef(value);
   return [
@@ -18,7 +18,7 @@ export function useVolatile<Value>(
     useCallback(
       (newValue) => {
         volatile.current = newValue;
-        setter(newValue);
+        setter?.(newValue);
       },
       [setter]
     ),
