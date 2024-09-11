@@ -5,7 +5,7 @@ import {
   faArrowDownUpLock,
   faArrowUpRightFromSquare,
 } from '@fortawesome/free-solid-svg-icons';
-import * as reactFontawesome from '@fortawesome/react-fontawesome';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { getHelioviewerUrl } from '@/api/helioviewer';
 import { useMemo } from 'react';
 import { useWindowEvent } from '@/utils/useWindowEvent';
@@ -34,26 +34,32 @@ export default function ChartHeader() {
         <div className="flex-grow basis-0 flex items-center gap-2">
           {(
             [
-              ['1H', 1 * 60 * 60 * 1000],
-              ['1D', 24 * 60 * 60 * 1000],
-              ['1W', 7 * 24 * 60 * 60 * 1000],
-              ['1M', 30 * 24 * 60 * 60 * 1000],
-              ['1Y', 365 * 24 * 60 * 60 * 1000],
+              [1 * 60 * 60 * 1000, '1H', 'last hour'],
+              [24 * 60 * 60 * 1000, '1D', 'last day'],
+              [7 * 24 * 60 * 60 * 1000, '1W', 'last week'],
+              [30 * 24 * 60 * 60 * 1000, '1M', 'last month'],
+              [365 * 24 * 60 * 60 * 1000, '1Y', 'last year'],
             ] as const
           )
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            .filter(([_, viewSize]) => range[1] - range[0] > viewSize)
-            .map(([label, viewSize]) => (
+            .filter(([viewSize]) => range[1] - range[0] > viewSize)
+            .map(([viewSize, label, tooltip]) => (
               <button
                 key={label}
                 type="button"
                 className="btn-tiny"
                 onClick={() => state.setFollowView(viewSize)}
+                title={`View ${tooltip}`}
               >
                 {label}
               </button>
             ))}
-          <button type="button" className="btn-tiny" onClick={() => state.setView(range)}>
+          <button
+            type="button"
+            className="btn-tiny"
+            onClick={() => state.setView(range)}
+            title="View everything"
+          >
             All
           </button>
         </div>
@@ -71,20 +77,20 @@ export default function ChartHeader() {
           />
           <IconButton
             icon={faAngleRight}
-            className="hidden xs:block hmd:block btn-tiny"
+            className="hidden md:block btn-tiny"
             onPointerDown={() => panControl.start(true)}
             title="Pan right"
           />
           <IconButton
             icon={faAngleLeft}
-            className="hidden xs:block hmd:block btn-tiny"
+            className="hidden md:block btn-tiny"
             onPointerDown={() => panControl.start(false)}
             title="Pan left"
           />
           <IconButton
             icon={faArrowDownUpLock}
             square={false}
-            className={`block btn-tiny ${settings.maximizeWattScale ? 'btn-invert' : ''}`}
+            className={`btn-tiny ${settings.maximizeWattScale ? 'btn-invert' : ''}`}
             onClick={() => changeSettings({ maximizeWattScale: !settings.maximizeWattScale })}
             title="Lock watt axis"
           />
@@ -98,10 +104,11 @@ export default function ChartHeader() {
             href={viewerUrl}
             target="_blank"
             rel="noopener"
+            title="View on Helioviewer"
           >
             <span className="hidden md:inline">Helioviewer </span>
             <span className="md:hidden">HV </span>
-            <reactFontawesome.FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+            <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
           </a>
         </div>
       </div>
