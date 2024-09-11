@@ -1,8 +1,8 @@
 import { Text } from '@visx/text';
 import { D3Scale } from '@visx/scale';
 import { textSize } from '@/app/theme';
-import { HorizontalBand } from '../HorizontalBand';
-import { PositionSizeProps } from '../base';
+import { HorizontalBand } from '@/components/svg/HorizontalBand';
+import { PositionSizeProps } from '@/components/svg/base';
 
 export interface FlareClassBandsProps extends PositionSizeProps {
   scale: D3Scale<number>;

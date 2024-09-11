@@ -41,3 +41,6 @@ export const textSize = {
   '8xl': { fontSize: '6rem', lineHeight: '1' },
   '9xl': { fontSize: '8rem', lineHeight: '1' },
 };
+
+// From https://tailwindcss.com/docs/padding
+export const pxSpace = (spacing: number): number => spacing * 4;

@@ -6,8 +6,7 @@ import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line } from '@visx/shape';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
-import { Dispatch, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NumberRange } from '@/utils/range';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { panView, pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
@@ -15,11 +14,13 @@ import { useWindowEvent } from '@/utils/useWindowEvent';
 import { colors, font, textSize } from '@/app/theme';
 import { Text } from '@visx/text';
 import { useStableDebouncedFlux } from '@/api/flux/useFlux';
-import { View, formatTime, formatWatt, timeExtent, wattExtent } from './flux';
-import { PositionSizeProps } from '../base';
-import Brush, { BrushView } from '../Brush';
+import Brush, { BrushView } from '@/components/svg/Brush';
+import { applyMargin, PositionSizeProps } from '@/components/svg/base';
+import { calcTimeTicks, formatTime, formatWatt, MAX_WATT_EXTENT, wattExtent } from './utils';
 import FlareClassBands from './FlareClassBands';
 import FluxLine from './FluxLine';
+import { usePlayerRenderState, usePlayerState } from '../state/state';
+import { MIN_VIEW_SIZE_MS, usePlayerSettings } from '../state/settings';
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
   return (
@@ -47,45 +48,41 @@ function FluxTimeTickLabel({ y, formattedValue, ...rest }: TickRendererProps) {
   ));
 }
 
-interface FluxMainProps extends PositionSizeProps {
-  onTimeSelect?: (timestamp: Date) => void;
-  minSizeMs: number;
-  lockWattAxis: boolean;
-  view: View;
-  setView: Dispatch<(previous: View) => View>;
-}
+export function MainChart(props: PositionSizeProps) {
+  const { view } = usePlayerRenderState();
+  const state = usePlayerState();
+  const [settings] = usePlayerSettings();
 
-export function FluxMain({
-  width,
-  height,
-  top = 0,
-  left = 0,
-  onTimeSelect,
-  minSizeMs,
-  lockWattAxis,
-  view,
-  setView,
-}: FluxMainProps) {
+  const timeLabelOffset = 42;
+  const wattLabelOffset = settings.maximizeWattScale ? 40 : 70;
+  const { width, height, top, left } = applyMargin(props, {
+    left: wattLabelOffset + 20,
+    right:48,
+    bottom: timeLabelOffset + 20,
+  });
+
   const data = useStableDebouncedFlux(view[0], view[1], width);
-  const series = useMemo(() => data.flat(), [data])
+  const series = useMemo(() => data.flat(), [data]);
 
   const timeScale = useMemo(
     () =>
       scaleUtc({
         range: [0, width],
-        domain: view === undefined ? timeExtent(series) : Array.from(view),
+        domain: Array.from(view),
       }),
-    [series, view, width]
+    [view, width]
   );
-
+  // Series should only be in the dependency array if the scale isn't locked.
+  // Wrangle into single variable to allow for static checking.
+  const wattDomain = settings.maximizeWattScale || series;
   const wattScale = useMemo(
     () =>
       scaleLog({
         range: [height, 0],
-        domain: lockWattAxis ? [1e-9, 1e-2] : wattExtent(series, 0.1),
+        domain: typeof wattDomain === 'boolean' ? MAX_WATT_EXTENT : wattExtent(wattDomain, 0.1),
         clamp: true,
       }),
-    [height, lockWattAxis, series]
+    [height, wattDomain]
   );
 
   const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
@@ -111,33 +108,28 @@ export function FluxMain({
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGElement>) => {
-      if (onTimeSelect === undefined) return;
       const point = localPoint(event);
       if (point === null) return;
-      onTimeSelect(timeScale.invert(point.x));
+      state.setTimestamp(timeScale.invert(point.x).getTime());
     },
-    [onTimeSelect, timeScale]
+    [state, timeScale]
   );
 
   useWindowEvent(
     'wheel',
     (event) => {
       event.preventDefault();
-      setView((current) => {
-        const point = localPoint(event);
-        if (point === null) return current;
-        const currentOrDomain =
-          current ?? (timeScale.domain().map((d) => d.getTime()) as NumberRange);
-        const zoomed = wheelZoomView(
-          currentOrDomain,
-          event.deltaY,
-          timeScale.invert(point.x).getTime(),
-          minSizeMs
-        );
+      const point = localPoint(event);
+      if (point === null) return;
+      const zoomed = wheelZoomView(
+        state.view(),
+        event.deltaY,
+        timeScale.invert(point.x).getTime(),
+        MIN_VIEW_SIZE_MS
+      );
 
-        const panDelta = timeScale.invert(event.deltaX).getTime() - view[0];
-        return panView(zoomed, panDelta);
-      });
+      const panDelta = timeScale.invert(event.deltaX).getTime() - view[0];
+      state.setView(panView(zoomed, panDelta));
     },
     { passive: false }
   );
@@ -172,16 +164,16 @@ export function FluxMain({
     const distance = calcDistance(pointA, pointB);
 
     if (lastPointA === undefined || pointA === undefined) return;
-    setView((oldView) =>
+    state.setView(
       pointerPanZoomView(
-        oldView,
+        state.view(),
         timeScale.invert(lastPointA.x).getTime(),
         timeScale.invert(pointA.x).getTime(),
         lastPointB && timeScale.invert(lastPointB.x).getTime(),
         pointB && timeScale.invert(pointB.x).getTime(),
         lastDistance,
         distance,
-        minSizeMs
+        MIN_VIEW_SIZE_MS
       )
     );
   });
@@ -205,7 +197,7 @@ export function FluxMain({
 
   const [zoomBrush, setZoomBrush] = useState<BrushView>(undefined);
 
-  const timeTicks = Math.max(width / 160, 2);
+  const timeTicks = calcTimeTicks(width);
   return (
     <svg
       ref={containerRef}
@@ -236,7 +228,7 @@ export function FluxMain({
         numTicks={timeTicks}
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
-        labelOffset={40}
+        labelOffset={timeLabelOffset}
         labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
       />
       <AxisLeft
@@ -246,7 +238,7 @@ export function FluxMain({
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
         tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
-        labelOffset={lockWattAxis ? 40 : 72}
+        labelOffset={wattLabelOffset}
         labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
       />
       {tooltipData && (
@@ -272,7 +264,7 @@ export function FluxMain({
         onBrushEnd={(zoomView) => {
           setZoomBrush(undefined);
           if (zoomView === undefined) return;
-          setView(() => [
+          state.setView([
             timeScale.invert(zoomView[0]).getTime(),
             timeScale.invert(zoomView[1]).getTime(),
           ]);

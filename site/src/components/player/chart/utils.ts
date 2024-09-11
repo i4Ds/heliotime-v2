@@ -4,27 +4,12 @@ import { toSuperScript } from '@/utils/super';
 import { TickFormatter } from '@visx/axis';
 import { NumberLike } from '@visx/scale';
 import { extent } from 'd3-array';
-import { createParser } from 'nuqs';
-
-export type View = Readonly<NumberRange>;
-
-const DEFAULT_VIEW_SIZE_MS = 24 * 60 * 60 * 1000;
-
-export const parseAsView = createParser<View>({
-  parse(value) {
-    const [start, end] = value.split('~').map((v) => Date.parse(v));
-    // eslint-disable-next-line unicorn/no-null
-    if (!Number.isFinite(start)) return null;
-    return [start, Number.isFinite(end) ? end : start + DEFAULT_VIEW_SIZE_MS];
-  },
-  serialize(view) {
-    return view.map((date) => new Date(date).toISOString()).join('~');
-  },
-});
 
 export function timeExtent(navData: FluxSeries | undefined): NumberRange | undefined {
   return (navData?.length ?? 0) === 0 ? undefined : [navData![0][0], Date.now()];
 }
+
+export const MAX_WATT_EXTENT = [1e-9, 1e-2];
 
 export function wattExtent(
   data: FluxSeries | undefined,
@@ -67,6 +52,8 @@ export const formatTime: TickFormatter<Date | NumberLike> = (value, index, value
   const dateText = formatDate(value, intervalMs);
   return timeText && dateText ? `${timeText} ${dateText}` : (timeText ?? dateText);
 };
+
+export const calcTimeTicks = (width: number) => Math.max(width / 160, 2);
 
 export const formatTimeOnlyDate: TickFormatter<Date | NumberLike> = (value, index, values) => {
   if (!(value instanceof Date)) return undefined;

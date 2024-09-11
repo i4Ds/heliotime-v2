@@ -8,9 +8,6 @@
     @apply bg-bg shadow-bg text-text font-normal;
   }
 
-  main {
-    @apply w-dvw h-dvh;
-  }
 
   h1,
   h2,
