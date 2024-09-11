@@ -57,7 +57,7 @@ export default function ChartHeader() {
           <button
             type="button"
             className="btn-tiny"
-            onClick={() => state.setView(range)}
+            onClick={() => state.setView(range, true)}
             title="View everything"
           >
             All
