@@ -103,6 +103,10 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
         minSize={timeScale(range[0] + MIN_VIEW_SIZE_MS)}
         allowOverflow
         clickViewSize={30}
+        onBrushStart={(isDrawingNew) => {
+          if (!isDrawingNew) return;
+          state.setView(state.view(), true);
+        }}
         onBrush={(newView) =>
           state.setView(
             newView === undefined

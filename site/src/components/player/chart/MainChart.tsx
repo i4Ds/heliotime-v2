@@ -267,7 +267,7 @@ export function MainChart(props: PositionSizeProps) {
           state.setView([
             timeScale.invert(zoomView[0]).getTime(),
             timeScale.invert(zoomView[1]).getTime(),
-          ]);
+          ], true);
         }}
       />
     </svg>

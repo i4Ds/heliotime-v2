@@ -84,7 +84,7 @@ export interface BrushProps extends PositionSizeProps {
   /**
    * Event called when a brush interaction starts.
    */
-  onBrushStart?: () => void;
+  onBrushStart?: (isDrawingNew: boolean) => void;
   /**
    * Event called when the brush view changes.
    */
@@ -122,7 +122,7 @@ export default function Brush({
     if (!stack.maybeAdd(event, event.clientX)) return;
     setAction(newMode);
     syncVolatileView();
-    onBrushStart();
+    onBrushStart(newMode === START_DRAW);
   };
 
   useWindowEvent('pointermove', (event: PointerEvent) => {

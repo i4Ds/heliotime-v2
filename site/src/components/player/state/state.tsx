@@ -2,7 +2,7 @@ import { fluxRangeQueryOptions } from '@/api/flux/useFluxRange';
 import { limitView, panView } from '@/utils/panZoom';
 import { NumberRange } from '@/utils/range';
 import { useInterval } from '@/utils/useInterval';
-import { useVolatile, useVolatileState } from '@/utils/useVolatile';
+import { useVolatileState, useVolatileSynced } from '@/utils/useVolatile';
 import { useQuery } from '@tanstack/react-query';
 import { createParser, parseAsIsoDateTime, useQueryStates } from 'nuqs';
 import { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
@@ -89,7 +89,7 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
   const [renderRange, getRange, setRange] = useVolatileState(DEFAULT_STATE.range);
 
   // Timestamp state
-  const [getTimestamp, setInternalTimestamp] = useVolatile(renderTimestamp);
+  const [getTimestamp, setInternalTimestamp] = useVolatileSynced(renderTimestamp);
   const setTimestamp = useCallback(
     (rawTimestamp: Timestamp, firstMajor = false) => {
       const range = getRange();
@@ -101,7 +101,7 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
   );
 
   // View state
-  const [getView, setInternalView] = useVolatile(renderView);
+  const [getView, setInternalView] = useVolatileSynced(renderView);
   const setView = useCallback(
     (rawView: View, firstMajor = false) => {
       const range = getRange();
