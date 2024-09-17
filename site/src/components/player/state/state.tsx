@@ -6,6 +6,7 @@ import { useVolatileState, useVolatileSynced } from '@/utils/useVolatile';
 import { useQuery } from '@tanstack/react-query';
 import { createParser, parseAsIsoDateTime, useQueryStates } from 'nuqs';
 import { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
+import { expFloor } from '@/utils/math';
 import {
   FOLLOW_FRONTRUN_PERCENT,
   MIN_FRAME_INTERVAL_MS,
@@ -83,8 +84,7 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
   const [settings, changeSettings] = usePlayerSettings();
   const [{ date: renderTimestamp, view: renderView }, setQueryState] = useQueryStates(
     SEARCH_PARAMS,
-    // Required by Safari (see throttleMs docs)
-    { throttleMs: 120 }
+    { throttleMs: 500 }
   );
   const [renderRange, getRange, setRange] = useVolatileState(DEFAULT_STATE.range);
 
@@ -152,7 +152,9 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
   const liveRelevantView = settings.isFollowing ? renderView : renderRange;
   const liveIntervalsMs = Math.max(
     MIN_FRAME_INTERVAL_MS,
-    chartWidth === 0 ? 0 : (liveRelevantView[1] - liveRelevantView[0]) / chartWidth / pixelRatio
+    chartWidth === 0
+      ? 0
+      : expFloor((liveRelevantView[1] - liveRelevantView[0]) / chartWidth / pixelRatio, 1.2)
   );
   useInterval(liveIntervalsMs, (deltaMs) => {
     setRange([getRange()[0], Date.now()]);

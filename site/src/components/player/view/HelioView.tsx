@@ -1,8 +1,8 @@
 import { getHelioviewerUrl, getSolarImageUrl } from '@/api/helioviewer';
 import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
+import Image, { ImageLoader } from 'next/image';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { resFloor } from '@/utils/math';
 import { usePlayerRenderState } from '../state/state';
 
@@ -32,8 +32,15 @@ export default function HelioView({ className = '' }: HelioViewProps) {
   const date = useMemo(() => new Date(flooredTimestamp), [flooredTimestamp]);
 
   const viewerUrl = useMemo(() => getHelioviewerUrl(date), [date]);
+  const getImageUrl: ImageLoader = useCallback(
+    ({ width }) => getSolarImageUrl(date, width),
+    [date]
+  );
+
   const [isLoading, setIsLoading] = useState(false);
   useEffect(() => setIsLoading(true), [date]);
+  const markLoaded = useCallback(() => setIsLoading(false), []);
+
   return (
     <div className={`flex flex-col justify-center items-center gap-2 ${className}`}>
       <a
@@ -45,15 +52,15 @@ export default function HelioView({ className = '' }: HelioViewProps) {
       >
         <Image
           src="_" // Required but useless
-          loader={({ width }) => getSolarImageUrl(date, width)}
+          loader={getImageUrl}
           alt="Sun imaged by SDO"
           priority
           fill
           sizes="30dvh"
           // Will trigger immediately on Firefox after the load change.
           // See: https://github.com/vercel/next.js/issues/30128#issuecomment-1090283728
-          onLoad={() => setIsLoading(false)}
-          onError={() => setIsLoading(false)}
+          onLoad={markLoaded}
+          onError={markLoaded}
         />
         <div className="absolute w-full px-2 bottom-1 text-center text-xs text-text-dim">
           Imaged by SDO at {formatDate(date)}

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { expFloor } from './math';
 
 export function useInterval(intervalMs: number, callback?: (deltaMs: number) => void) {
   const savedCallback = useRef<typeof callback>(callback);
@@ -8,16 +7,14 @@ export function useInterval(intervalMs: number, callback?: (deltaMs: number) => 
   }, [callback]);
 
   const noCallback = callback === undefined;
-  // Stabilize to not recreate the interval too often
-  const stableIntervalMs = expFloor(intervalMs, 1.2);
   useEffect(() => {
     if (noCallback) return undefined;
-    let lastCall = Date.now() - stableIntervalMs;
+    let lastCall = Date.now() - intervalMs;
     const interval = setInterval(() => {
       const now = Date.now();
       savedCallback.current?.(now - lastCall);
       lastCall = now;
-    }, stableIntervalMs);
+    }, intervalMs);
     return () => clearInterval(interval);
-  }, [noCallback, stableIntervalMs]);
+  }, [intervalMs, noCallback]);
 }

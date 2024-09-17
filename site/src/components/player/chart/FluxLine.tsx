@@ -2,6 +2,7 @@ import { FluxSections } from '@/api/flux/data';
 import { curveMonotoneX } from '@visx/curve';
 import { ScaleLogarithmic, ScaleTime } from 'd3-scale';
 import { LinePath } from '@visx/shape';
+import { memo } from 'react';
 
 export interface FluxLineProps {
   data: FluxSections;
@@ -9,7 +10,8 @@ export interface FluxLineProps {
   wattScale: ScaleLogarithmic<number, number>;
 }
 
-export default function FluxLine({ data, timeScale, wattScale }: FluxLineProps) {
+// eslint-disable-next-line prefer-arrow-callback
+export default memo(function FluxLine({ data, timeScale, wattScale }: FluxLineProps) {
   return data.map((section) => (
     <LinePath
       key={section[0][0]}
@@ -20,4 +22,4 @@ export default function FluxLine({ data, timeScale, wattScale }: FluxLineProps) 
       className="stroke-primary"
     />
   ));
-}
+});

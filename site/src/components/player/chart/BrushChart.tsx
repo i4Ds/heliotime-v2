@@ -1,16 +1,21 @@
 import { useStableDebouncedFlux } from '@/api/flux/useFlux';
-import { AxisTop } from '@visx/axis';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
 import { useMemo } from 'react';
 import { colors, font, textSize } from '@/app/theme';
 import { PositionSizeProps } from '@/components/svg/base';
 import Brush from '@/components/svg/Brush';
-import { calcTimeTicks, formatTimeOnlyDate, MAX_WATT_EXTENT } from './utils';
+import { calcTimeTicks, formatTimeOnlyDate, MAX_WATT_EXTENT, MemoAxisTop } from './utils';
 import FluxLine from './FluxLine';
 import { usePlayerState, usePlayerRenderState } from '../state/state';
 import { MIN_VIEW_SIZE_MS } from '../state/settings';
 
+const AXIS_LABEL_PROPS = {
+  fill: colors.text.DEFAULT,
+  ...textSize.xs,
+  ...font.style,
+  filter: 'url(#label-backdrop)',
+};
 const CHART_Y_PADDING = 2;
 const BACKDROP_PADDING = 0.15;
 const BACKDROP_BLUR_RADIUS = 0.2;
@@ -80,7 +85,7 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
       <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
       <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
       <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
-      <AxisTop
+      <MemoAxisTop
         top={height}
         scale={timeScale}
         tickFormat={formatTimeOnlyDate}
@@ -89,12 +94,7 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
         tickLength={0}
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
-        tickLabelProps={{
-          fill: colors.text.DEFAULT,
-          ...textSize.xs,
-          ...font.style,
-          filter: 'url(#label-backdrop)',
-        }}
+        tickLabelProps={AXIS_LABEL_PROPS}
       />
       <Brush
         width={width}

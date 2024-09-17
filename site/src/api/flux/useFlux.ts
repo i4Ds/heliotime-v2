@@ -52,7 +52,7 @@ export function useDebouncedFlux(
   maxWaitMs = 200
 ): FluxSections {
   const [[debouncedFrom, debouncedTo, debouncedResolution]] = useDebounce(
-    [from, to, resolution],
+    useMemo(() => [from, to, resolution], [from, to, resolution]),
     delayMs,
     { leading: true, maxWait: maxWaitMs }
   );

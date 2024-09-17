@@ -1,5 +1,5 @@
 import { FluxMeasurement } from '@/api/flux/data';
-import { AxisBottom, AxisLeft, TickRendererProps } from '@visx/axis';
+import { TickRendererProps } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
@@ -16,11 +16,21 @@ import { Text } from '@visx/text';
 import { useStableDebouncedFlux } from '@/api/flux/useFlux';
 import Brush, { BrushView } from '@/components/svg/Brush';
 import { applyMargin, PositionSizeProps } from '@/components/svg/base';
-import { calcTimeTicks, formatTime, formatWatt, MAX_WATT_EXTENT, wattExtent } from './utils';
+import {
+  calcTimeTicks,
+  formatTime,
+  formatWatt,
+  MAX_WATT_EXTENT,
+  MemoAxisBottom,
+  MemoAxisLeft,
+  wattExtent,
+} from './utils';
 import FlareClassBands from './FlareClassBands';
 import FluxLine from './FluxLine';
 import { usePlayerRenderState, usePlayerState } from '../state/state';
 import { MIN_VIEW_SIZE_MS, usePlayerSettings } from '../state/settings';
+
+const AXIS_LABEL_PROPS = { fill: colors.text.DEFAULT, ...textSize.sm, ...font.style };
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
   return (
@@ -57,7 +67,7 @@ export function MainChart(props: PositionSizeProps) {
   const wattLabelOffset = settings.lockWattAxis ? 40 : 70;
   const { width, height, top, left } = applyMargin(props, {
     left: wattLabelOffset + 20,
-    right:48,
+    right: 48,
     bottom: timeLabelOffset + 20,
   });
 
@@ -219,7 +229,7 @@ export function MainChart(props: PositionSizeProps) {
       <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
       <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
       <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
-      <AxisBottom
+      <MemoAxisBottom
         top={height}
         scale={timeScale}
         label="Universal Time"
@@ -229,17 +239,17 @@ export function MainChart(props: PositionSizeProps) {
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
         labelOffset={timeLabelOffset}
-        labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
+        labelProps={AXIS_LABEL_PROPS}
       />
-      <AxisLeft
+      <MemoAxisLeft
         scale={wattScale}
         label="Watts × m⁻²"
         tickFormat={formatWatt}
         stroke={colors.text.DEFAULT}
         tickStroke={colors.text.DEFAULT}
-        tickLabelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
+        tickLabelProps={AXIS_LABEL_PROPS}
         labelOffset={wattLabelOffset}
-        labelProps={{ fill: colors.text.DEFAULT, ...textSize.sm, ...font.style }}
+        labelProps={AXIS_LABEL_PROPS}
       />
       {tooltipData && (
         <>
@@ -264,10 +274,10 @@ export function MainChart(props: PositionSizeProps) {
         onBrushEnd={(zoomView) => {
           setZoomBrush(undefined);
           if (zoomView === undefined) return;
-          state.setView([
-            timeScale.invert(zoomView[0]).getTime(),
-            timeScale.invert(zoomView[1]).getTime(),
-          ], true);
+          state.setView(
+            [timeScale.invert(zoomView[0]).getTime(), timeScale.invert(zoomView[1]).getTime()],
+            true
+          );
         }}
       />
     </svg>

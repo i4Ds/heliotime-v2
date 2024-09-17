@@ -1,9 +1,14 @@
 import { FluxSeries } from '@/api/flux/data';
 import { NumberRange } from '@/utils/range';
 import { toSuperScript } from '@/utils/super';
-import { TickFormatter } from '@visx/axis';
+import { AxisBottom, AxisLeft, AxisTop, TickFormatter } from '@visx/axis';
 import { NumberLike } from '@visx/scale';
 import { extent } from 'd3-array';
+import { memo } from 'react';
+
+export const MemoAxisLeft = memo(AxisLeft);
+export const MemoAxisBottom = memo(AxisBottom);
+export const MemoAxisTop = memo(AxisTop);
 
 export function timeExtent(navData: FluxSeries | undefined): NumberRange | undefined {
   return (navData?.length ?? 0) === 0 ? undefined : [navData![0][0], Date.now()];
