@@ -3,6 +3,8 @@ import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
+import { resFloor } from '@/utils/math';
+import { usePlayerRenderState } from '../state/state';
 
 const viewActionText = 'View on Helioviewer';
 
@@ -20,14 +22,18 @@ function formatDate(date: Date): string {
 }
 
 export interface HelioViewProps {
-  timestamp: Date;
   className?: string;
 }
 
-export default function HelioView({ timestamp, className = '' }: HelioViewProps) {
-  const viewerUrl = useMemo(() => getHelioviewerUrl(timestamp), [timestamp]);
+export default function HelioView({ className = '' }: HelioViewProps) {
+  const { timestamp } = usePlayerRenderState();
+  // The SDO AIA images have a 12-second cadence. We floor to the nearest second.
+  const flooredTimestamp = resFloor(timestamp, 1000);
+  const date = useMemo(() => new Date(flooredTimestamp), [flooredTimestamp]);
+
+  const viewerUrl = useMemo(() => getHelioviewerUrl(date), [date]);
   const [isLoading, setIsLoading] = useState(false);
-  useEffect(() => setIsLoading(true), [timestamp]);
+  useEffect(() => setIsLoading(true), [date]);
   return (
     <div className={`flex flex-col justify-center items-center gap-2 ${className}`}>
       <a
@@ -39,7 +45,7 @@ export default function HelioView({ timestamp, className = '' }: HelioViewProps)
       >
         <Image
           src="_" // Required but useless
-          loader={({ width }) => getSolarImageUrl(timestamp, width)}
+          loader={({ width }) => getSolarImageUrl(date, width)}
           alt="Sun imaged by SDO"
           priority
           fill
@@ -50,7 +56,7 @@ export default function HelioView({ timestamp, className = '' }: HelioViewProps)
           onError={() => setIsLoading(false)}
         />
         <div className="absolute w-full px-2 bottom-1 text-center text-xs text-text-dim">
-          Imaged by SDO at {formatDate(timestamp)}
+          Imaged by SDO at {formatDate(date)}
         </div>
         {isLoading && (
           <div className="absolute size-full flex items-center justify-center backdrop-blur-sm bg-bg bg-opacity-20">

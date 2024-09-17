@@ -1,9 +1,9 @@
 'use client';
 
 import { useParentSize } from '@visx/responsive';
-import HelioView from '@/components/HelioView';
+import HelioView from '@/components/player/view/HelioView';
 import { pxSpace } from '@/app/theme';
-import { HelioPlayerRenderStateContext, HelioPlayerStateProvider } from './state/state';
+import { HelioPlayerStateProvider } from './state/state';
 import ChartHeader from './header/ChartHeader';
 import { MainChart } from './chart/MainChart';
 import BrushChart from './chart/BrushChart';
@@ -24,11 +24,7 @@ export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
       <HelioPlayerStateProvider chartWidth={width}>
         <HelioPlayerPanProvider>
           <div className={`flex flex-col content-center gap-3 overflow-y-hidden ${className}`}>
-            <HelioPlayerRenderStateContext.Consumer>
-              {({ timestamp }) => (
-                <HelioView timestamp={new Date(timestamp)} className="hidden hmd:flex h-[40dvh]" />
-              )}
-            </HelioPlayerRenderStateContext.Consumer>
+            <HelioView className="hidden hmd:flex h-[40dvh]" />
             <ChartHeader />
             <div
               ref={parentRef}
