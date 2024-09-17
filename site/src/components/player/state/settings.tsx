@@ -1,5 +1,5 @@
 import { parseAsBoolean, useQueryStates } from 'nuqs';
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export interface HelioPlayerSettings {
   readonly isFollowing: boolean;
@@ -35,17 +35,30 @@ const SEARCH_PARAMS = {
 
 export function HelioPlayerSettingsProvider({ children }: React.PropsWithChildren) {
   const [querySettings, setQuerySettings] = useQueryStates(SEARCH_PARAMS, { clearOnDefault: true });
-  const [sessionSettings, setSessionSettings] = useState<HelioPlayerSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<HelioPlayerSettings>(() => ({
+    ...DEFAULT_SETTINGS,
+    ...querySettings,
+  }));
+
+  // Always sync query with settings as history navigation should not change them.
+  useEffect(() => {
+    const isQueryDifferent = Object.keys(querySettings).some(
+      (key) =>
+        settings[key as keyof typeof querySettings] !==
+        querySettings[key as keyof typeof querySettings]
+    );
+    // Skip update if already in sync to avoid infinite loop
+    if (!isQueryDifferent) return;
+    setQuerySettings(settings);
+  }, [settings, setQuerySettings, querySettings]);
+
   const changeSettings: HelioPlayerSettingsChanger = useCallback(
-    (change) => {
-      setQuerySettings(change);
-      setSessionSettings((previous) => ({ ...previous, ...change }));
-    },
-    [setQuerySettings]
+    (change) => setSettings((previous) => ({ ...previous, ...change })),
+    []
   );
   const settingsUse = useMemo(
-    () => [{ ...sessionSettings, ...querySettings }, changeSettings] as const,
-    [changeSettings, querySettings, sessionSettings]
+    () => [settings, changeSettings] as const,
+    [settings, changeSettings]
   );
   return (
     <HelioPlayerSettingsContext.Provider value={settingsUse}>
