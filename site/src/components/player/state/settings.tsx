@@ -1,9 +1,9 @@
-import { useVolatileState } from '@/utils/useVolatile';
-import { createContext, useCallback, useContext, useMemo } from 'react';
+import { parseAsBoolean, useQueryStates } from 'nuqs';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 export interface HelioPlayerSettings {
   readonly isFollowing: boolean;
-  readonly maximizeWattScale: boolean;
+  readonly lockWattAxis: boolean;
 }
 
 // Hardcoded settings
@@ -13,7 +13,7 @@ export const MIN_VIEW_SIZE_MS = 5 * 60 * 1000;
 // Changeable settings
 const DEFAULT_SETTINGS: HelioPlayerSettings = {
   isFollowing: true,
-  maximizeWattScale: true,
+  lockWattAxis: true,
 };
 
 export type HelioPlayerSettingsChanger = (change: Partial<HelioPlayerSettings>) => void;
@@ -29,15 +29,23 @@ export const HelioPlayerSettingsContext = createContext<HelioPlayerSettingsUse>(
 
 export const usePlayerSettings = () => useContext(HelioPlayerSettingsContext);
 
+const SEARCH_PARAMS = {
+  lockWattAxis: parseAsBoolean.withDefault(true),
+} as const;
+
 export function HelioPlayerSettingsProvider({ children }: React.PropsWithChildren) {
-  const [settings, getSetting, setSettings] = useVolatileState(DEFAULT_SETTINGS);
+  const [querySettings, setQuerySettings] = useQueryStates(SEARCH_PARAMS, { clearOnDefault: true });
+  const [sessionSettings, setSessionSettings] = useState<HelioPlayerSettings>(DEFAULT_SETTINGS);
   const changeSettings: HelioPlayerSettingsChanger = useCallback(
-    (change) => setSettings({ ...getSetting(), ...change }),
-    [getSetting, setSettings]
+    (change) => {
+      setQuerySettings(change);
+      setSessionSettings((previous) => ({ ...previous, ...change }));
+    },
+    [setQuerySettings]
   );
   const settingsUse = useMemo(
-    () => [settings, changeSettings] as const,
-    [changeSettings, settings]
+    () => [{ ...sessionSettings, ...querySettings }, changeSettings] as const,
+    [changeSettings, querySettings, sessionSettings]
   );
   return (
     <HelioPlayerSettingsContext.Provider value={settingsUse}>

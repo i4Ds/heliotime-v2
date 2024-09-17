@@ -54,7 +54,7 @@ export function MainChart(props: PositionSizeProps) {
   const [settings] = usePlayerSettings();
 
   const timeLabelOffset = 42;
-  const wattLabelOffset = settings.maximizeWattScale ? 40 : 70;
+  const wattLabelOffset = settings.lockWattAxis ? 40 : 70;
   const { width, height, top, left } = applyMargin(props, {
     left: wattLabelOffset + 20,
     right:48,
@@ -74,7 +74,7 @@ export function MainChart(props: PositionSizeProps) {
   );
   // Series should only be in the dependency array if the scale isn't locked.
   // Wrangle into single variable to allow for static checking.
-  const wattDomain = settings.maximizeWattScale || series;
+  const wattDomain = settings.lockWattAxis || series;
   const wattScale = useMemo(
     () =>
       scaleLog({

@@ -90,8 +90,8 @@ export default function ChartHeader() {
           <IconButton
             icon={faArrowDownUpLock}
             square={false}
-            className={`btn-tiny ${settings.maximizeWattScale ? 'btn-invert' : ''}`}
-            onClick={() => changeSettings({ maximizeWattScale: !settings.maximizeWattScale })}
+            className={`btn-tiny ${settings.lockWattAxis ? 'btn-invert' : ''}`}
+            onClick={() => changeSettings({ lockWattAxis: !settings.lockWattAxis })}
             title="Lock watt axis"
           />
           <ShareButton
