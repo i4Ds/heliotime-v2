@@ -36,14 +36,14 @@ const config: Config = {
     extend: {
       screens: {
         xs: '480px',
-        'hxs': { raw: '(min-height: 480px)' },
-        'hmd': { raw: '(min-height: 768px)' },
-        'hlg': { raw: '(min-height: 1024px)' },
-        'hxl': { raw: '(min-height: 1280px)' },
-        'h2xl': { raw: '(min-height: 1536px)' },
+        hxs: { raw: '(min-height: 480px)' },
+        hmd: { raw: '(min-height: 768px)' },
+        hlg: { raw: '(min-height: 1024px)' },
+        hxl: { raw: '(min-height: 1280px)' },
+        h2xl: { raw: '(min-height: 1536px)' },
       },
     },
   },
-  plugins: [],
+  plugins: [require('tailwindcss-animate')],
 };
 export default config;

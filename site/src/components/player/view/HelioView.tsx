@@ -48,7 +48,7 @@ export default function HelioView({ className = '' }: HelioViewProps) {
         target="_blank"
         rel="noopener"
         title={viewActionText}
-        className="relative flex-grow aspect-square overflow-hidden rounded-md border-2 border-bg-2"
+        className="relative flex-grow aspect-square overflow-hidden rounded-md border border-bg-2"
       >
         <Image
           src="_" // Required but useless

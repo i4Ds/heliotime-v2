@@ -34,6 +34,10 @@
   [type='submit'] {
     @apply btn;
   }
+
+  input {
+    @apply bg-bg-0 text-text-focus border border-bg-2 rounded-sm px-3 py-1.5;
+  }
 }
 
 @layer components {

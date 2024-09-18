@@ -34,3 +34,7 @@ The site will be available at:
 - <http://localhost:3000>
 
 The graph might be empty because the data is still importing.
+
+## Components
+
+The components in [`src/components/ui`](src/components/ui) are modified versions from [shadcn/ui](https://ui.shadcn.com/).
