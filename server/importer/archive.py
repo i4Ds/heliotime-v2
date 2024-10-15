@@ -29,7 +29,7 @@ warnings.filterwarnings(
 )
 
 
-def _select_best_source(day_result: QueryResponse) -> QueryResponseRow:
+def _select_best_source_day(day_result: QueryResponse) -> QueryResponseRow:
     # Assert that all intervals always go an entire day
     assert day_result[0]['Start Time'].to_datetime().time() == time(0, 0, 0, 0)
     end_times = set(day_result['End Time'])
@@ -46,6 +46,13 @@ def _select_best_source(day_result: QueryResponse) -> QueryResponseRow:
     # Select highest resolution
     high_res = day_result[day_result['Resolution'] == 'flx1s']
     return high_res[0] if len(high_res) >= 1 else day_result[0]
+
+
+def _select_best_source(results: UnifiedResponse) -> UnifiedResponse:
+    return UnifiedResponse() if len(results[0]) == 0 else UnifiedResponse(*(
+        _select_best_source_day(days_result)
+        for days_result in results[0].group_by('Start Time').groups
+    ))
 
 
 def _month_start(date: datetime) -> datetime:
@@ -110,12 +117,7 @@ class ArchiveImporter(Importer):
                     attrs.Instrument("XRS")
                 )
             )
-        if len(results[0]) == 0:
-            return UnifiedResponse()
-        return UnifiedResponse(*(
-            _select_best_source(days_result)
-            for days_result in results[0].group_by('Start Time').groups
-        ))
+        return _select_best_source(results)
 
     async def _download_results(self, results: UnifiedResponse) -> Results:
         for i_try in range(self.max_download_tries):

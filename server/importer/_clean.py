@@ -82,7 +82,7 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
 _FLUX_TREND_PACE = timedelta(hours=12)
 
 
-def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
+def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
     # Calculate flux value acceleration (speed of change)
     forward_velocity = _change_speed(log_flux)
     forward_acceleration = _change_speed(forward_velocity)
@@ -96,26 +96,41 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     abs_velocity = _pick_abs_max(backward_velocity, forward_velocity)
     abs_acceleration = _pick_abs_max(backward_acceleration, forward_acceleration)
 
-    # Mark measurements that introduce high acceleration.
-    has_high_acceleration = abs_acceleration > 0.01
-    has_excessive_acceleration = abs_acceleration > 0.04
+    # Determine data frequency.
+    # TODO: make importer only import data with one frequency.
+    #   Cause it merges days it might mix two different satellite sources
+    #   with for example 1s and 3s interval.
+    time_delta = cast(pd.Series, log_flux).index.diff()
+    median_interval = time_delta.median()
+
+    # Mark measurements with high acceleration.
+    has_high_acceleration = cast(pd.Series, abs_acceleration > (0.00003 if is_live else 0.01))
+    has_excessive_acceleration = cast(pd.Series, abs_acceleration > (0.00018 if is_live else 0.04))
+    # Bridge small gaps in high acceleration regions.
+    has_high_acceleration |= has_high_acceleration.rolling(median_interval * 5, center=True).sum() >= 2
+    # Mark edges of high acceleration regions for grouping.
+    high_acceleration_edge = has_high_acceleration ^ has_high_acceleration.shift(
+        fill_value=has_high_acceleration.iloc[0]
+    )
+
     # Mark measurements after a large time gaps for splitting.
-    is_after_gap = cast(pd.Series, log_flux).index.diff() > timedelta(minutes=1)
+    is_after_gap = time_delta > median_interval * 10
     # Remove outliers and split at marked
-    group_id = (has_high_acceleration | is_after_gap).cumsum()[~has_excessive_acceleration]
+    group_id = (high_acceleration_edge | is_after_gap).cumsum()[~has_excessive_acceleration]
     log_groups = log_flux[~has_excessive_acceleration].groupby(group_id)
 
     # Filter leftover groups
     filtered_log_groups = deque()
     for _, log_group in log_groups:
+        # Filter short groups
+        if log_group.index[-1] - log_group.index[0] < timedelta(seconds=10):
+            continue
+        mean_group_velocity = abs_velocity.loc[log_group.index].mean()
         if (
-                # Filter short groups
-                log_group.index[-1] - log_group.index[0] < timedelta(seconds=10) or
                 # Filter flat groups (probably the satellite's value border)
-                log_group.rolling(timedelta(minutes=30), center=True).std().median() < 0.0001 or
-                # Filter out unnaturally fast changing groups (likely leftover outlier spots)
-                abs_velocity.loc[log_group.index].mean() > 0.005
-
+                mean_group_velocity < (5e-6 if is_live else 5e-5) or
+                # Filter unnaturally fast changing groups (likely leftover outlier spots)
+                0.009 < mean_group_velocity
         ):
             continue
         filtered_log_groups.append(log_group)
@@ -128,8 +143,7 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
         # Outlier detection on a single group doesn't make sense
         return log_groups[0]
     # Calculate minimum measurements count before moving average is taken as reference
-    points_per_second = len(log_flux) / (log_flux.index[-1] - log_flux.index[0]).total_seconds()
-    min_measurements = 4 * 60 * 60 * points_per_second
+    min_measurements = 4 * 60 * 60 / median_interval.total_seconds()
     # Calculate bidirectional moving average
     log_flux = pd.concat(log_groups)
     log_mean_forward = log_flux.rolling(_FLUX_TREND_PACE).mean()
@@ -190,9 +204,11 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
     return cast(pd.Series, pd.concat(log_groups))
 
 
-def clean_flux(flux: Flux) -> Flux:
+def clean_flux(flux: Flux, is_live: bool) -> Flux:
     """
     Denoises and removes outliers from the provided measured flux.
+    Assumes that the all data has the same intended frequency and
+    not for example from a 1s and 3s source.
 
     Tuned to work on the archive data. Start dates to test (~4 day range):
         (
@@ -204,6 +220,9 @@ def clean_flux(flux: Flux) -> Flux:
             '1996-07-07', '2002-12-19', '2002-12-20', '2009-09-22',
             '2017-09-06'
         )
+
+    :param flux: Raw flux data.
+    :param is_live: If the data is from the live source. (meaning 1-minute averaged)
     """
     if flux.empty:
         return empty_flux()
@@ -215,7 +234,7 @@ def clean_flux(flux: Flux) -> Flux:
         # Value range is exponential so find outliers with log
         log_flux = np.log10(flux)
     log_flux = _denoise(log_flux)
-    log_flux = _remove_outliers(log_flux)
+    log_flux = _remove_outliers(log_flux, is_live)
     if log_flux is None or log_flux.empty:
         return empty_flux()
     # Return to normal distribution

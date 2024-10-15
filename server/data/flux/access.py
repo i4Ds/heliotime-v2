@@ -18,7 +18,7 @@ def _select_flux(
         timeout: Optional[timedelta] = None,
 ) -> Awaitable[list]:
     timeout_seconds = None if timeout is None else timeout.total_seconds()
-    if interval < source.raw_resolution:
+    if interval <= source.raw_resolution:
         return connection.fetch(
             f'''
                 SELECT {time_component('time')} AS time, flux
