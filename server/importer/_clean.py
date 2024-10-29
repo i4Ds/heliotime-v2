@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 from collections import deque
-from datetime import timedelta
-from typing import cast, Optional
+from dataclasses import dataclass
+from datetime import timedelta, datetime
+from functools import cached_property
+from typing import cast, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -24,6 +28,15 @@ def _pick_abs_max(series_a: pd.Series, series_b: pd.Series) -> pd.Series:
     ), axis=1).max(axis=1)
 
 
+def _has_previous_bool_changed(series: pd.Series) -> pd.Series:
+    """
+    Marks the edges where the boolean series changes.
+    """
+    if len(series) == 0:
+        return series & 0
+    return series ^ series.shift(fill_value=series.iloc[0])
+
+
 # Centered window size used for smoothing noisy measurements.
 _SMOOTHING_WINDOW = timedelta(minutes=5)
 # Centered windows size of how long the shortest flare would be.
@@ -37,6 +50,7 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
 
     # Mask already smooth parts
     is_rough = (sustained - log_flux).abs() > 0.004
+    is_slightly_rough = (sustained - log_flux).abs() > 0.0035
 
     # Mark valid slopes to not smooth out solar flares.
     # If a big change is actually a flare, it will reside for at least a few seconds
@@ -52,17 +66,22 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
         .rolling(_SMOOTHING_WINDOW, center=True).max()
     is_valid_slope = (sustained_velocity_max / rough_velocity_max) > 0.45
 
-    # Combine and smooth out all flags to not create hard edges
-    is_valid_slope_nearby = is_valid_slope.rolling(_SUSTAINED_MOTION_WINDOW, center=True).mean()
     # If 20% nearby is rough, smooth also this point.
     is_rough_nearby = (is_rough.rolling(_SMOOTHING_WINDOW, center=True).mean() / 0.2).clip(upper=1)
-    smooth_force = pd.concat((1 - is_valid_slope_nearby, is_rough_nearby), axis=1).min(axis=1)
-    detail_smooth_force = pd.concat((is_valid_slope_nearby, is_rough_nearby), axis=1).min(axis=1)
+    is_slightly_rough_nearby = (is_slightly_rough.rolling(_SMOOTHING_WINDOW, center=True).mean() / 0.2).clip(upper=1)
+    # Strong smoothing where there is no valid slope, and it's rough nearby.
+    smooth_force = pd.concat((1 - is_valid_slope, is_rough_nearby), axis=1).min(axis=1)
+    # Small smoothing where it's slightly rough, and it's not already strongly smoothed.
+    detail_smooth_force = (is_slightly_rough_nearby - smooth_force).clip(lower=0)
+
+    # Smooth out forces to not create hard edges
+    smooth_force = smooth_force.rolling(_SUSTAINED_MOTION_WINDOW, center=True).mean()
+    detail_smooth_force = detail_smooth_force.rolling(_SUSTAINED_MOTION_WINDOW, center=True).mean()
 
     # Calculate smoothing corrections
     smooth = log_flux.rolling(_SMOOTHING_WINDOW, center=True).mean()
     detail_corrections = (sustained - log_flux) * detail_smooth_force
-    corrections = (smooth - log_flux) * smooth_force + detail_corrections.clip(upper=0.02, lower=-0.02)
+    corrections = (smooth - log_flux) * smooth_force + detail_corrections.clip(upper=0.1, lower=-0.1)
 
     # Clip corrections as excessive corrections only smooth out
     # outlier spikes making them harder to detect later.
@@ -77,9 +96,265 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     return log_flux + corrections
 
 
-# How fast the flux trend changes.
-# Should be bigger than a flare but still catch up with longer term changes.
-_FLUX_TREND_PACE = timedelta(hours=12)
+def _filter_impossible_dips(log_groups: Sequence[pd.Series]) -> Sequence[pd.Series]:
+    """
+    The flux only ever spikes up with solar flares, meaning we can remove any negative dips.
+    """
+    log_flux = pd.concat(log_groups)
+    log_narrow_min = log_flux.rolling(timedelta(minutes=30), center=True).min()
+    log_wide_min = log_narrow_min.rolling(timedelta(minutes=30), center=True).min()
+    # Calculate the "bottom" of the signal without the dips.
+    log_base = pd.concat((
+        log_narrow_min.rolling(timedelta(hours=4), center=True).median(),
+        log_wide_min.rolling(timedelta(hours=16), center=True).median(),
+    ), axis=1).min(axis=1)
+    filtered_log_groups = deque()
+    for log_group in log_groups:
+        flat_group = log_group - log_base
+        if flat_group.min() < -0.2:
+            # Only cut of dip parts in case the group also contains valid parts.
+            log_group = log_group[flat_group > -0.05]
+            # If the group was only the drip, drop it.
+            if len(log_group) < 10:
+                continue
+        filtered_log_groups.append(log_group)
+    return filtered_log_groups
+
+
+_CONNECTIVITY_SAMPLE_SIZE = timedelta(minutes=1)
+
+
+def _check_group_connectivity(
+        log_groups: Sequence[pd.Series],
+        sample_count: int,
+        section_start_threshold: float,
+        is_forward: bool
+) -> tuple[set[int], deque[tuple[datetime, datetime, float]]]:
+    """
+    Will check the groups for connectivity and output potential outliers and uncertainty sections.
+    Connected groups start and end at a similar value, creating a smooth transition.
+    Uncertainty sections are groups that are too far time-wise from
+    the previous group to make a reasonable connectivity check.
+
+    :param log_groups: Groups to check.
+    :param sample_count: Number of measurements required for calculating a reference.
+    :param section_start_threshold: Allowed delta threshold for starting an uncertainty section.
+    :param is_forward: If connectivity is checked in the forward direction.
+    :return: Tuple of:
+        - Object IDs of the outlier groups
+        - Ordered list of uncertainty sections (start, end, reference).
+          Reference in forward direction is the start of the section and in backward direction the end.
+    """
+    outliers = set()
+    sections = deque[tuple[datetime, datetime, float]]()
+    # Start of uncertainty section (in direction of iteration)
+    section_start: datetime | None = None
+    section_reference: float | None = None
+    log_groups_iter = iter(log_groups if is_forward else reversed(log_groups))
+
+    def limit_sample(raw_sample: pd.Series):
+        """Cut old part of the sample if it's too big."""
+        return (
+            raw_sample.iloc[-sample_count:]
+            if is_forward else
+            raw_sample.iloc[:sample_count]
+        )
+
+    # Fill up the initial sample
+    initial_sample_groups = deque()
+    initial_sample_size = 0
+    for log_group in log_groups_iter:
+        if is_forward:
+            initial_sample_groups.append(log_group)
+        else:
+            initial_sample_groups.appendleft(log_group)
+        initial_sample_size += len(log_group)
+        if initial_sample_size >= sample_count:
+            break
+    sample = limit_sample(cast(pd.Series, pd.concat(initial_sample_groups)))
+
+    # Check connectivity on the rest of the groups
+    for log_group in log_groups_iter:
+        sample_median = sample.median()
+        sample_range = (sample.index[-1] - sample.index[0]).total_seconds()
+        sample_age = (
+            log_group.index[0] - sample.index[-1]
+            if is_forward else
+            sample.index[0] - log_group.index[-1]
+        ).total_seconds()
+
+        # Delta to sampled reference
+        delta = log_group.iloc[0 if is_forward else -1] - sample_median
+        # Allowed delta based on range and age.
+        # Creates a cone shape where the allowed delta is bigger for older samples.
+        allowed_delta = 0.001 * sample_range + 0.03 * sample_age
+        if allowed_delta < abs(delta):
+            outliers.add(id(log_group))
+            # Do not use outliers as reference
+            continue
+
+        # Maybe start uncertainty section
+        if section_start is None:
+            if section_start_threshold < allowed_delta:
+                # Pick the farthest end of sample as start
+                # as borders of gaps tend to also be outliers.
+                section_start = sample.index[0 if is_forward else -1]
+                # Use existing sample as reference.
+                # Forward will provide the start and backward the end reference.
+                section_reference = sample_median
+        # Maybe close uncertainty section
+        if section_start is not None:
+            section_end = None
+            # If group is big enough to end the gap. Assumed to be no outlier.
+            if len(log_group) > sample_count * 5:
+                section_end = log_group.index[0 if is_forward else -1]
+            # If the sample has passed the gap. Used groups might be outliers.
+            elif sample_range < _CONNECTIVITY_SAMPLE_SIZE.total_seconds() * 1.5:
+                section_end = sample.index[-1 if is_forward else 0]
+
+            # If section was closed validly, add it to the result.
+            if section_end is not None and (
+                    section_start < section_end if is_forward else section_end < section_start
+            ):
+                if is_forward:
+                    sections.append((section_start, section_end, section_reference))
+                else:
+                    sections.appendleft((section_end, section_start, section_reference))
+                section_start = None
+                section_reference = None
+
+        # Update sample
+        sample = limit_sample(cast(pd.Series, pd.concat(
+            (sample, log_group)
+            if is_forward else
+            (log_group, sample)
+        )))
+
+    # Merge overlapping sections
+    if len(sections) > 0:
+        sections_iter = iter(sections)
+        merged_sections = deque()
+        open_section = next(sections_iter)
+        for section in sections_iter:
+            # If not overlapping
+            if open_section[1] < section[0]:
+                merged_sections.append(open_section)
+                open_section = section
+                continue
+            # Merge overlapping sections
+            reference = (open_section[2] if open_section[0] < section[0] else section[2]) \
+                if is_forward else \
+                (open_section[2] if section[1] < open_section[1] else section[2])
+            open_section = (
+                min(open_section[0], section[0]),
+                max(open_section[1], section[1]),
+                reference
+            )
+        merged_sections.append(open_section)
+        sections = merged_sections
+
+    return outliers, sections
+
+
+@dataclass(frozen=True)
+class _UncertainSection:
+    """
+    Represents a section where the connectivity is uncertain.
+    Groups in this section will be filtered based on a linear interpolation between the neighboring certain sections.
+    """
+    time: tuple[datetime, datetime]
+    reference: tuple[float, float]
+
+    @cached_property
+    def slope(self) -> float:
+        return (self.reference[1] - self.reference[0]) / (self.time[1] - self.time[0]).total_seconds()
+
+    def interpolate(self, time: datetime) -> float:
+        return self.reference[0] + self.slope * (time - self.time[0]).total_seconds()
+
+    def resize(self, start: datetime, end: datetime) -> _UncertainSection:
+        """Resize the section and recalculates the reference."""
+        return _UncertainSection(
+            (start, end),
+            (self.interpolate(start), self.interpolate(end))
+        )
+
+    def is_before(self, group: pd.Series) -> bool:
+        return self.time[1] < group.index[-1]
+
+    def includes(self, group: pd.Series) -> bool:
+        return self.time[0] <= group.index[0] and self.time[1] >= group.index[-1]
+
+    def is_outlier(self, group: pd.Series, check_index: int) -> bool:
+        delta = group.iloc[check_index] - self.interpolate(group.index[check_index])
+        return abs(delta) > 0.2
+
+
+def _filter_by_connectivity(log_groups: Sequence[pd.Series], median_interval: timedelta) -> Sequence[pd.Series]:
+    """
+    Filter outliers by checking connectivity (if end and start of groups match up)
+    """
+    if len(log_groups) == 1:
+        # Checking connectivity on a single group doesn't make sense.
+        return log_groups
+    # Number of measurements required for calculating a reference.
+    sample_count = int(np.ceil(_CONNECTIVITY_SAMPLE_SIZE / median_interval))
+    # Use a higher threshold as longer intervals have more uncertainty.
+    section_start_threshold = 2 if median_interval > timedelta(seconds=55) else 1.5
+    # Check connectivity in both directions
+    forward_outliers, forward_sections = _check_group_connectivity(
+        log_groups, sample_count, section_start_threshold, True
+    )
+    backward_outliers, backward_sections = _check_group_connectivity(
+        log_groups, sample_count, section_start_threshold, False
+    )
+
+    # Intersect uncertain sections together
+    uncertain_sections = deque[_UncertainSection]()
+    while forward_sections and backward_sections:
+        start_forward, end_forward, start_reference = forward_sections[0]
+        start_backward, end_backward, end_reference = backward_sections[0]
+        # Check for overlap
+        if start_forward < end_backward and start_backward < end_forward:
+            # Calculate the intersection range
+            section = _UncertainSection(
+                (start_forward, end_backward),
+                (start_reference, end_reference)
+            ).resize(
+                max(start_forward, start_backward),
+                min(end_forward, end_backward)
+            )
+            uncertain_sections.append(section)
+        # Remove the range that ends first to move forward
+        if end_forward < end_backward:
+            forward_sections.popleft()
+        else:
+            backward_sections.popleft()
+
+    # Filter out the outliers
+    filtered_log_groups = deque()
+    uncertain_sections_iter = iter(uncertain_sections)
+    section = next(uncertain_sections_iter, None)
+    for log_group in log_groups:
+        # Check if in both outlier sets
+        group_id = id(log_group)
+        if group_id in forward_outliers and group_id in backward_outliers:
+            continue
+
+        # Check if in an uncertainty section
+        if section is not None and section.is_before(log_group):
+            section = next((
+                s for s in uncertain_sections_iter
+                if not s.is_before(log_group)
+            ), None)
+        if section is not None and section.includes(log_group) and (
+                section.is_outlier(log_group, log_group.argmin()) or
+                section.is_outlier(log_group, log_group.argmax())
+        ):
+            continue
+        filtered_log_groups.append(log_group)
+
+    return filtered_log_groups
 
 
 def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
@@ -96,107 +371,52 @@ def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
     abs_velocity = _pick_abs_max(backward_velocity, forward_velocity)
     abs_acceleration = _pick_abs_max(backward_acceleration, forward_acceleration)
 
-    # Determine data frequency.
-    # TODO: make importer only import data with one frequency.
-    #   Cause it merges days it might mix two different satellite sources
-    #   with for example 1s and 3s interval.
+    # Determine data frequency of the majority.
+    # Cannot be assumed to be constant as the source might change each day.
     time_delta = cast(pd.Series, log_flux).index.diff()
     median_interval = time_delta.median()
 
+    # Mark clipped values at the value borders
+    lower_border = min(log_flux.min(), -8)
+    upper_border = max(log_flux.max(), -3)
+    is_near_value_border = cast(pd.Series, (log_flux < lower_border + 0.1) | (upper_border - 0.1 < log_flux))
+    if is_near_value_border.any():
+        is_clipped_value = is_near_value_border & cast(
+            pd.Series, abs_velocity.rolling(median_interval * 10, center=True).median() == 0
+        )
+        clipped_edge = _has_previous_bool_changed(is_clipped_value)
+    else:
+        is_clipped_value = clipped_edge = 0
+
     # Mark measurements with high acceleration.
-    has_high_acceleration = cast(pd.Series, abs_acceleration > (0.00003 if is_live else 0.01))
+    has_high_acceleration = cast(pd.Series, abs_acceleration > (0.00002 if is_live else 0.01))
     has_excessive_acceleration = cast(pd.Series, abs_acceleration > (0.00018 if is_live else 0.04))
     # Bridge small gaps in high acceleration regions.
     has_high_acceleration |= has_high_acceleration.rolling(median_interval * 5, center=True).sum() >= 2
     # Mark edges of high acceleration regions for grouping.
-    high_acceleration_edge = has_high_acceleration ^ has_high_acceleration.shift(
-        fill_value=has_high_acceleration.iloc[0]
-    )
+    high_acceleration_edge = _has_previous_bool_changed(has_high_acceleration)
 
-    # Mark measurements after a large time gaps for splitting.
-    is_after_gap = time_delta > median_interval * 10
+    # Mark measurements after a large time gaps.
+    # Must be at least 1 minute in case the source fell back to 1-minute averaged interval on a few days.
+    is_after_gap = time_delta > max(median_interval * 10, timedelta(minutes=1))
+
     # Remove outliers and split at marked
-    group_id = (high_acceleration_edge | is_after_gap).cumsum()[~has_excessive_acceleration]
-    log_groups = log_flux[~has_excessive_acceleration].groupby(group_id)
+    group_id = (clipped_edge | high_acceleration_edge | is_after_gap).cumsum()
+    log_groups = log_flux[~(is_clipped_value | has_excessive_acceleration)].groupby(group_id)
 
-    # Filter leftover groups
-    filtered_log_groups = deque()
-    for _, log_group in log_groups:
-        # Filter short groups
-        if log_group.index[-1] - log_group.index[0] < timedelta(seconds=10):
-            continue
-        mean_group_velocity = abs_velocity.loc[log_group.index].mean()
-        if (
-                # Filter flat groups (probably the satellite's value border)
-                mean_group_velocity < (5e-6 if is_live else 5e-5) or
-                # Filter unnaturally fast changing groups (likely leftover outlier spots)
-                0.009 < mean_group_velocity
-        ):
-            continue
-        filtered_log_groups.append(log_group)
-    log_groups = filtered_log_groups
+    # Filter groups with unnaturally high sustained velocity
+    log_groups = [
+        log_group for _, log_group in log_groups
+        if abs_velocity.loc[log_group.index].mean() < 0.01
+    ]
     if len(log_groups) == 0:
         return None
 
-    # Filter outlier groups
-    if len(log_groups) == 1:
-        # Outlier detection on a single group doesn't make sense
-        return log_groups[0]
-    # Calculate minimum measurements count before moving average is taken as reference
-    min_measurements = 4 * 60 * 60 / median_interval.total_seconds()
-    # Calculate bidirectional moving average
-    log_flux = pd.concat(log_groups)
-    log_mean_forward = log_flux.rolling(_FLUX_TREND_PACE).mean()
-    log_mean_backward = log_flux[::-1].rolling(_FLUX_TREND_PACE).mean()[::-1]
-    # Calculate standard deviation.
-    # Both are always nearly identical so just take the min.
-    log_std = max(min(
-        (log_flux - log_mean_forward).std(),
-        (log_flux - log_mean_backward).std()
-    ), 0.2)
-    # Filter based on Z-Score
-    filtered_log_groups = deque()
-    for log_group in log_groups:
-        start_date = log_group.index[0]
-        end_date = log_group.index[-1]
-        start_index = log_flux.index.get_loc(start_date)
-        end_index = log_flux.index.get_loc(end_date)
-
-        # Get previous and next mean as unaffected references
-        last_log_mean = log_mean_forward.iloc[max(start_index - 1, 0)]
-        next_log_mean = log_mean_backward.iloc[min(end_index + 1, len(log_mean_backward) - 1)]
-
-        # Take mean of other side if one side isn't based on enough measurements.
-        # If both sides don't use enough points, we keep them as is.
-        last_enough_measurements = min_measurements < start_index - log_flux.index.searchsorted(
-            start_date - _FLUX_TREND_PACE)
-        next_enough_measurements = min_measurements < log_flux.index.searchsorted(
-            end_date + _FLUX_TREND_PACE, side='right') - end_index
-        if last_enough_measurements or next_enough_measurements:
-            if not last_enough_measurements:
-                last_log_mean = next_log_mean
-            if not next_enough_measurements:
-                next_log_mean = last_log_mean
-
-        # Calculate Z-Score at start and end
-        zscore_start = (log_group.iloc[0] - last_log_mean) / log_std
-        zscore_end = (log_group.iloc[-1] - next_log_mean) / log_std
-        log_group_median = log_group.median()
-        zscore_median_abs = min(
-            abs(log_group_median - last_log_mean) if last_enough_measurements else np.inf,
-            abs(log_group_median - next_log_mean) if next_enough_measurements else np.inf
-        ) / log_std
-        min_abs_zscore = min(abs(zscore_start), abs(zscore_end), zscore_median_abs)
-
-        # If one score is negative and the other positive
-        # the group starts over the mean and ends under it or vice versa.
-        doesnt_crosses_mean = np.sign(zscore_start) == np.sign(zscore_end)
-
-        # Filter outlier groups is way above or below
-        if doesnt_crosses_mean and min_abs_zscore > 3:
-            continue
-        filtered_log_groups.append(log_group)
-    log_groups = filtered_log_groups
+    # Apply other filters
+    log_groups = _filter_impossible_dips(log_groups)
+    if len(log_groups) == 0:
+        return None
+    log_groups = _filter_by_connectivity(log_groups, median_interval)
     if len(log_groups) == 0:
         return None
 
@@ -207,8 +427,6 @@ def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
 def clean_flux(flux: Flux, is_live: bool) -> Flux:
     """
     Denoises and removes outliers from the provided measured flux.
-    Assumes that the all data has the same intended frequency and
-    not for example from a 1s and 3s source.
 
     Tuned to work on the archive data. Start dates to test (~4 day range):
         (
