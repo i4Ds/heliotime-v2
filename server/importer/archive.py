@@ -203,7 +203,7 @@ class ArchiveImporter(Importer):
                     except:  # noqa
                         self._logger.exception(f'Failed to load {file} into memory. Skipping')
             flux = pd.concat(files_flux).loc[start:]
-            await self._import(clean_flux(flux))
+            await self._import(clean_flux(flux, is_live=False))
             await self._delete_files(files)
         return timedelta(hours=1)
 

@@ -84,9 +84,16 @@ async def fetch_raw_flux(
 async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
     if len(flux) == 0:
         return
-    await connection.copy_records_to_table(
-        source.table_name, records=flux.items()
-    )
+    async with connection.transaction():
+        # Delete old entries if they exist
+        await connection.execute(
+            f"DELETE FROM {source.table_name} WHERE $1 <= time AND time <= $2",
+            flux.index[0], flux.index[-1]
+        )
+        # Insert new entries
+        await connection.copy_records_to_table(
+            source.table_name, records=flux.items()
+        )
 
     # refresh_continuous_aggregate() cannot be run within transaction
     now = datetime.now(timezone.utc)
