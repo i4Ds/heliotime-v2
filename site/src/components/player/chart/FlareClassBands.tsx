@@ -1,6 +1,6 @@
 import { Text } from '@visx/text';
 import { D3Scale } from '@visx/scale';
-import { textSize } from '@/app/theme';
+import { THEME } from '@/app/theme';
 import { HorizontalBand } from '@/components/svg/HorizontalBand';
 import { PositionSizeProps } from '@/components/svg/base';
 
@@ -41,7 +41,7 @@ export default function FlareClassBands({
         angle={90}
         className="fill-text"
         // eslint-disable-next-line react/jsx-props-no-spreading
-        {...textSize.sm}
+        {...THEME.textSize.sm}
       >
         Xray Flare Class
       </Text>

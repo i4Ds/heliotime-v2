@@ -35,38 +35,60 @@ function padZeros(value: number, digits = 2): string {
   return value.toFixed(0).padStart(digits, '0');
 }
 
-function formatDate(value: Date, intervalMs: number): string | undefined {
-  if (value.getTime() !== new Date(value).setUTCHours(0, 0, 0, 0)) return undefined;
+function isOnlyDate(value: Date): boolean {
+  return (
+    value.getUTCHours() === 0 &&
+    value.getUTCMinutes() === 0 &&
+    value.getUTCSeconds() === 0 &&
+    value.getUTCMilliseconds() === 0
+  );
+}
+
+function formatTime(value: Date, intervalMs: number): string {
+  let text = `${padZeros(value.getUTCHours())}:${padZeros(value.getUTCMinutes())}`;
+  if (intervalMs < 60 * 1000) text += `:${padZeros(value.getUTCSeconds())}`;
+  if (intervalMs < 1000) text += `:${padZeros(value.getUTCMilliseconds(), 3)}`;
+  return text;
+}
+
+function formatDate(value: Date, intervalMs: number): string {
   let text = padZeros(value.getUTCFullYear(), 4);
   if (intervalMs < 364 * 24 * 60 * 60 * 1000) text += `-${padZeros(value.getUTCMonth() + 1)}`;
   if (intervalMs < 27 * 24 * 60 * 60 * 1000) text += `-${padZeros(value.getUTCDate())}`;
   return text;
 }
 
-export const formatTime: TickFormatter<Date | NumberLike> = (value, index, values) => {
+export function formatTimeCursor(timestamp: number, intervalMsEstimate: number): string {
+  const value = new Date(timestamp);
+  // Be a bit more conservative with the estimate
+  const intervalMs = intervalMsEstimate * 0.8;
+  // Cursor should be more precise than ticks as it's not aligned
+  const precisionMs = intervalMs * 0.1;
+  if (intervalMs <= 24 * 60 * 60 * 1000) return formatTime(value, precisionMs);
+  // Still show time if precision is too low
+  if (precisionMs <= 24 * 60 * 60 * 1000)
+    return `${value.getUTCDate()} ${formatTime(value, precisionMs)}`;
+  return formatDate(value, precisionMs);
+}
+
+export const formatTimeTick: TickFormatter<Date | NumberLike> = (value, index, values) => {
   if (!(value instanceof Date)) return undefined;
   const intervalMs = (values[1] ?? values[0]).value.valueOf() - values[0].value.valueOf();
-
-  let timeText: string | undefined;
-  if (intervalMs < 24 * 60 * 60 * 1000) {
-    timeText = `${padZeros(value.getUTCHours())}:${padZeros(value.getUTCMinutes())}`;
-    if (intervalMs < 60 * 1000) timeText += `:${padZeros(value.getUTCSeconds())}`;
-    if (intervalMs < 1000) timeText += `:${padZeros(value.getUTCMilliseconds(), 3)}`;
-  }
-
-  const dateText = formatDate(value, intervalMs);
+  const timeText = intervalMs < 24 * 60 * 60 * 1000 ? formatTime(value, intervalMs) : undefined;
+  const dateText = isOnlyDate(value) ? formatDate(value, intervalMs) : undefined;
   return timeText && dateText ? `${timeText} ${dateText}` : (timeText ?? dateText);
 };
 
 export const calcTimeTicks = (width: number) => Math.max(width / 160, 2);
 
-export const formatTimeOnlyDate: TickFormatter<Date | NumberLike> = (value, index, values) => {
+export const formatDateTick: TickFormatter<Date | NumberLike> = (value, index, values) => {
   if (!(value instanceof Date)) return undefined;
   const intervalMs = (values[1] ?? values[0]).value.valueOf() - values[0].value.valueOf();
-  return formatDate(value, intervalMs);
+  // Only label pure dates to prevent double labeling
+  return isOnlyDate(value) ? formatDate(value, intervalMs) : undefined;
 };
 
-export const formatWatt: TickFormatter<NumberLike> = (value, index, values) => {
+export const formatWattTick: TickFormatter<NumberLike> = (value, index, values) => {
   const logValue = Math.log10(value.valueOf());
   const exponent = Math.floor(logValue);
 

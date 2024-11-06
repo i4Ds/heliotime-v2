@@ -2,7 +2,7 @@
 
 import { useParentSize } from '@visx/responsive';
 import HelioView from '@/components/player/view/HelioView';
-import { pxSpace } from '@/app/theme';
+import { THEME } from '@/app/theme';
 import { HelioPlayerStateProvider } from './state/state';
 import ChartHeader from './header/ChartHeader';
 import { MainChart } from './chart/MainChart';
@@ -35,7 +35,7 @@ export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
                 <svg width={width} height={height} className="overflow-visible absolute">
                   <MainChart
                     width={width}
-                    height={height - (showBrush ? brushHeight + pxSpace(2) : 0)}
+                    height={height - (showBrush ? brushHeight + THEME.spacePx(2) : 0)}
                   />
                   {showBrush && (
                     <BrushChart width={width} height={brushHeight} top={height - brushHeight} />

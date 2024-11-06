@@ -1,25 +1,27 @@
 import { FluxMeasurement } from '@/api/flux/data';
-import { TickRendererProps } from '@visx/axis';
+import { TickLabelProps } from '@visx/axis';
 import { localPoint } from '@visx/event';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line } from '@visx/shape';
-import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
+import { useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { panView, pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
 import { useWindowEvent } from '@/utils/useWindowEvent';
-import { colors, font, textSize } from '@/app/theme';
-import { Text } from '@visx/text';
+import { THEME, toPx } from '@/app/theme';
+import { TextProps } from '@visx/text';
 import { useStableDebouncedFlux } from '@/api/flux/useFlux';
 import Brush, { BrushView } from '@/components/svg/Brush';
 import { applyMargin, PositionSizeProps } from '@/components/svg/base';
+import { TextRect } from '@/components/svg/TextRect';
 import {
   calcTimeTicks,
-  formatTime,
-  formatWatt,
+  formatTimeCursor,
+  formatTimeTick,
+  formatWattTick,
   MAX_WATT_EXTENT,
   MemoAxisBottom,
   MemoAxisLeft,
@@ -30,7 +32,30 @@ import FluxLine from './FluxLine';
 import { usePlayerRenderState, usePlayerState } from '../state/state';
 import { MIN_VIEW_SIZE_MS, usePlayerSettings } from '../state/settings';
 
-const AXIS_LABEL_PROPS = { fill: colors.text.DEFAULT, ...textSize.sm, ...font.style };
+const TICK_LENGTH = THEME.spacePx(2);
+const TICK_LABEL_PADDING = THEME.spacePx(1);
+const AXIS_LABEL_PROPS = {
+  ...THEME.textSize.sm,
+  ...THEME.font.style,
+  fill: THEME.colors.text.DEFAULT,
+} satisfies TextProps;
+const WATT_TICK_LABEL_PROPS = {
+  ...AXIS_LABEL_PROPS,
+  ...THEME.textSize.xs,
+  dx: 0,
+  x: -TICK_LENGTH - TICK_LABEL_PADDING,
+} satisfies TickLabelProps<unknown>;
+const TIME_TICK_LABEL_PROPS = {
+  ...AXIS_LABEL_PROPS,
+  ...THEME.textSize.xs,
+  verticalAnchor: 'start',
+  textAnchor: 'middle',
+  y: TICK_LENGTH + TICK_LABEL_PADDING,
+  // Set to 0 because axis sets it to strange values
+  dy: 0,
+  // Set to 1 to force the text to wrap
+  width: 1,
+} satisfies TickLabelProps<unknown>;
 
 function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefined) {
   return (
@@ -42,28 +67,12 @@ function shouldBrush(event: PointerEvent | React.PointerEvent): boolean {
   return event.pointerType !== 'touch' && event.button === 2;
 }
 
-function FluxTimeTickLabel({ y, formattedValue, ...rest }: TickRendererProps) {
-  return formattedValue?.split(' ').map((line, index) => (
-    <Text
-      // eslint-disable-next-line react/jsx-props-no-spreading
-      {...rest}
-      key={line}
-      y={y + 16 * index}
-      fill={colors.text.DEFAULT}
-      // eslint-disable-next-line react/jsx-props-no-spreading
-      {...textSize.xs}
-    >
-      {line}
-    </Text>
-  ));
-}
-
 export function MainChart(props: PositionSizeProps) {
-  const { view } = usePlayerRenderState();
+  const { view, timestamp } = usePlayerRenderState();
   const state = usePlayerState();
   const [settings] = usePlayerSettings();
 
-  const timeLabelOffset = 42;
+  const timeLabelOffset = 40;
   const wattLabelOffset = settings.lockWattAxis ? 40 : 70;
   const { width, height, top, left } = applyMargin(props, {
     left: wattLabelOffset + 20,
@@ -95,26 +104,22 @@ export function MainChart(props: PositionSizeProps) {
     [height, wattDomain]
   );
 
-  const { tooltipTop, tooltipLeft, tooltipData, showTooltip, hideTooltip } =
-    useTooltip<FluxMeasurement>();
   const { containerRef: tooltipContainerRef, TooltipInPortal } = useTooltipInPortal();
-  const [tooltipPoint, setTooltipPoint] = useState<Point | undefined>();
-  useEffect(() => {
-    if (tooltipPoint === undefined || data.length === 0) {
-      hideTooltip();
-      return;
-    }
+  const [hoverPoint, setHoverPoint] = useState<Point | undefined>();
+  const hoverMeasurement = useMemo(() => {
+    if (hoverPoint === undefined || series.length === 0) return undefined;
     const index = bisector<FluxMeasurement, number>((m) => m[0]).center(
       series,
-      timeScale.invert(tooltipPoint.x).getTime()
+      timeScale.invert(hoverPoint.x).getTime()
     );
     const measurement = series[index];
-    showTooltip({
-      tooltipData: measurement,
-      tooltipLeft: timeScale(measurement[0]),
-      tooltipTop: tooltipPoint.y,
-    });
-  }, [data, hideTooltip, series, showTooltip, timeScale, tooltipPoint]);
+    return {
+      time: new Date(measurement[0]),
+      value: measurement[1],
+      x: timeScale(measurement[0]),
+      y: wattScale(measurement[1]),
+    };
+  }, [hoverPoint, series, timeScale, wattScale]);
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGElement>) => {
@@ -152,7 +157,7 @@ export function MainChart(props: PositionSizeProps) {
       if (shouldBrush(event)) return;
       const point = localPoint(event) ?? undefined;
       if (!stack.maybeAdd(event, point)) return;
-      setTooltipPoint(stack.length < 2 ? point : undefined);
+      setHoverPoint(stack.length < 2 ? point : undefined);
     },
     [stack]
   );
@@ -161,7 +166,7 @@ export function MainChart(props: PositionSizeProps) {
 
     // Show tooltip if there is only one pointer
     const point = localPoint(containerRef.current, event) ?? undefined;
-    if (stack.length === 1) setTooltipPoint(point);
+    if (stack.length === 1) setHoverPoint(point);
 
     // Get and update points
     const [lastPointA, lastPointB] = stack.getAll();
@@ -193,21 +198,29 @@ export function MainChart(props: PositionSizeProps) {
   const handleHover = useCallback(
     (event: React.PointerEvent) => {
       if (stack.length > 0) return;
-      setTooltipPoint(localPoint(event) ?? undefined);
+      setHoverPoint(localPoint(event) ?? undefined);
     },
     [stack]
   );
   const handleHoverEnd = useCallback(
     (event: React.PointerEvent) => {
       if (stack.length > 0 || event.pointerType !== 'mouse') return;
-      setTooltipPoint(undefined);
+      setHoverPoint(undefined);
     },
     [stack]
   );
 
   const [zoomBrush, setZoomBrush] = useState<BrushView>(undefined);
 
-  const timeTicks = calcTimeTicks(width);
+  const desiredTimeTicks = calcTimeTicks(width);
+  const intervalMsEstimate = (view[1] - view[0]) / desiredTimeTicks;
+
+  const cursorX = timeScale(timestamp);
+  const cursorLabel = useMemo(
+    () => formatTimeCursor(timestamp, intervalMsEstimate),
+    [timestamp, intervalMsEstimate]
+  );
+
   return (
     <svg
       ref={containerRef}
@@ -225,46 +238,41 @@ export function MainChart(props: PositionSizeProps) {
       {/* Needs to reference child svg because of browser
           inconsistencies use-measure does not account for. */}
       <svg ref={tooltipContainerRef} />
+
+      {/* Background */}
       <FlareClassBands width={width} height={height} scale={wattScale} />
-      <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
-      <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
-      <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
-      <MemoAxisBottom
-        top={height}
+      <GridColumns
         scale={timeScale}
-        label="Universal Time"
-        tickFormat={formatTime}
-        tickComponent={FluxTimeTickLabel}
-        numTicks={timeTicks}
-        stroke={colors.text.DEFAULT}
-        tickStroke={colors.text.DEFAULT}
-        labelOffset={timeLabelOffset}
-        labelProps={AXIS_LABEL_PROPS}
+        height={height}
+        numTicks={desiredTimeTicks}
+        stroke={THEME.colors.bg[1]}
       />
-      <MemoAxisLeft
-        scale={wattScale}
-        label="Watts × m⁻²"
-        tickFormat={formatWatt}
-        stroke={colors.text.DEFAULT}
-        tickStroke={colors.text.DEFAULT}
-        tickLabelProps={AXIS_LABEL_PROPS}
-        labelOffset={wattLabelOffset}
-        labelProps={AXIS_LABEL_PROPS}
-      />
-      {tooltipData && (
+
+      {/* Data */}
+      <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
+
+      {/* Border */}
+      <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
+
+      {/* Tooltip */}
+      {hoverPoint && (
+        <Line y2={height} x1={hoverPoint.x} x2={hoverPoint.x} className="stroke-text" />
+      )}
+      {hoverMeasurement && (
         <>
-          <Line y2={height} x1={tooltipLeft} x2={tooltipLeft} className="stroke-text" />
-          <Circle cx={tooltipLeft} cy={wattScale(tooltipData[1])} r={3} className="fill-text" />
+          <Circle cx={hoverMeasurement.x} cy={hoverMeasurement.y} r={3} className="fill-text" />
           <TooltipInPortal
-            top={tooltipTop}
-            left={tooltipLeft}
+            left={hoverMeasurement.x}
+            top={hoverMeasurement.y}
             className="text-center flex flex-col gap-1"
           >
-            <b>{new Date(tooltipData[0]).toISOString()}</b>
-            <div>{tooltipData[1].toExponential(5)} W/m²</div>
+            <b>{hoverMeasurement.time.toISOString()}</b>
+            <div>{hoverMeasurement.value.toExponential(5)} W/m²</div>
           </TooltipInPortal>
         </>
       )}
+
+      {/* Brush */}
       <Brush
         width={width}
         height={height}
@@ -280,6 +288,59 @@ export function MainChart(props: PositionSizeProps) {
           );
         }}
       />
+
+      {/* Axis */}
+      <MemoAxisBottom
+        top={height}
+        scale={timeScale}
+        label="Universal Time"
+        tickFormat={formatTimeTick}
+        numTicks={desiredTimeTicks}
+        stroke={THEME.colors.text.DEFAULT}
+        tickLength={TICK_LENGTH}
+        tickStroke={THEME.colors.text.DEFAULT}
+        tickLabelProps={TIME_TICK_LABEL_PROPS}
+        labelOffset={timeLabelOffset}
+        labelProps={AXIS_LABEL_PROPS}
+      />
+      <MemoAxisLeft
+        scale={wattScale}
+        label="Watts × m⁻²"
+        tickFormat={formatWattTick}
+        stroke={THEME.colors.text.DEFAULT}
+        tickLength={TICK_LENGTH}
+        tickStroke={THEME.colors.text.DEFAULT}
+        tickLabelProps={WATT_TICK_LABEL_PROPS}
+        labelOffset={wattLabelOffset}
+        labelProps={AXIS_LABEL_PROPS}
+      />
+
+      {/* Cursor */}
+      {cursorX > 0 && cursorX < width && (
+        <>
+          <Line
+            y1={0}
+            y2={height + TICK_LENGTH + TICK_LABEL_PADDING}
+            x1={cursorX}
+            x2={cursorX}
+            className="stroke-primary"
+          />
+          <TextRect
+            // eslint-disable-next-line react/jsx-props-no-spreading
+            {...TIME_TICK_LABEL_PROPS}
+            x={cursorX}
+            y={height + TIME_TICK_LABEL_PROPS.y}
+            fill={THEME.colors.bg.DEFAULT}
+            rectClassName="fill-primary"
+            padding={TICK_LABEL_PADDING}
+            // Label does not have any characters like g going below the baseline.
+            // So we can remove the space from the bottom.
+            paddingBottom={TICK_LABEL_PADDING - toPx(TIME_TICK_LABEL_PROPS.fontSize) * 0.3}
+          >
+            {cursorLabel}
+          </TextRect>
+        </>
+      )}
     </svg>
   );
 }

@@ -8,7 +8,6 @@
     @apply bg-bg shadow-bg text-text font-normal;
   }
 
-
   h1,
   h2,
   h3,
@@ -51,6 +50,6 @@
     @apply bg-text hover:bg-text-focus hover:text-bg-1 active:bg-text-dim active:text-bg text-bg;
   }
   .btn-tiny {
-    @apply px-2 py-1
+    @apply px-2 py-1;
   }
 }

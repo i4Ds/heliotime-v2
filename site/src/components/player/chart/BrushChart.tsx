@@ -2,18 +2,19 @@ import { useStableDebouncedFlux } from '@/api/flux/useFlux';
 import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
 import { useMemo } from 'react';
-import { colors, font, textSize } from '@/app/theme';
+import { THEME } from '@/app/theme';
 import { PositionSizeProps } from '@/components/svg/base';
 import Brush from '@/components/svg/Brush';
-import { calcTimeTicks, formatTimeOnlyDate, MAX_WATT_EXTENT, MemoAxisTop } from './utils';
+import { Line } from '@visx/shape';
+import { calcTimeTicks, formatDateTick, MAX_WATT_EXTENT, MemoAxisTop } from './utils';
 import FluxLine from './FluxLine';
 import { usePlayerState, usePlayerRenderState } from '../state/state';
 import { MIN_VIEW_SIZE_MS } from '../state/settings';
 
 const AXIS_LABEL_PROPS = {
-  fill: colors.text.DEFAULT,
-  ...textSize.xs,
-  ...font.style,
+  ...THEME.textSize.xs,
+  ...THEME.font.style,
+  fill: THEME.colors.text.DEFAULT,
   filter: 'url(#label-backdrop)',
 };
 const CHART_Y_PADDING = 2;
@@ -27,7 +28,7 @@ const backdropFloodSize = 1 + 2 * BACKDROP_PADDING;
 
 export default function BrushChart({ width, height, top, left }: PositionSizeProps) {
   const state = usePlayerState();
-  const { range, view } = usePlayerRenderState();
+  const { range, view, timestamp } = usePlayerRenderState();
   const data = useStableDebouncedFlux(range[0], range[1], width);
 
   const timeScale = useMemo(
@@ -48,54 +49,26 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
     [height]
   );
 
+  const cursorX = useMemo(() => timeScale(timestamp), [timeScale, timestamp]);
   const timeTicks = calcTimeTicks(width);
   return (
     <svg width={width} height={height} y={top} x={left} className="overflow-visible">
-      <defs>
-        <filter
-          id="label-backdrop"
-          x={backdropFilterOffset}
-          y={backdropFilterOffset}
-          width={backdropFilterSize}
-          height={backdropFilterSize}
-          primitiveUnits="objectBoundingBox"
-        >
-          <feFlood
-            x={backdropFloodOffset}
-            y={backdropFloodOffset}
-            width={backdropFloodSize}
-            height={backdropFloodSize}
-            floodColor={colors.bg.DEFAULT}
-            floodOpacity={0.5}
-          />
-          <feGaussianBlur
-            x={backdropFilterOffset}
-            y={backdropFilterOffset}
-            width={backdropFilterSize}
-            height={backdropFilterSize}
-            stdDeviation={BACKDROP_BLUR_RADIUS}
-            result="backdrop"
-          />
-          <feMerge>
-            <feMergeNode in="backdrop" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-      <GridColumns scale={timeScale} height={height} numTicks={timeTicks} stroke={colors.bg[1]} />
-      <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
-      <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
-      <MemoAxisTop
-        top={height}
+      {/* Background */}
+      <GridColumns
         scale={timeScale}
-        tickFormat={formatTimeOnlyDate}
+        height={height}
         numTicks={timeTicks}
-        hideTicks
-        tickLength={0}
-        stroke={colors.text.DEFAULT}
-        tickStroke={colors.text.DEFAULT}
-        tickLabelProps={AXIS_LABEL_PROPS}
+        stroke={THEME.colors.bg[1]}
       />
+
+      {/* Data */}
+      <FluxLine data={data} timeScale={timeScale} wattScale={wattScale} />
+
+      {/* Borders */}
+      <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
+
+      {/* Current view and timestamp */}
+      <Line y1={0} y2={height} x1={cursorX} x2={cursorX} className="stroke-primary" />
       <Brush
         width={width}
         height={height}
@@ -114,6 +87,50 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
               : [timeScale.invert(newView[0]).getTime(), timeScale.invert(newView[1]).getTime()]
           )
         }
+      />
+
+      {/* Axis */}
+      <defs>
+        <filter
+          id="label-backdrop"
+          x={backdropFilterOffset}
+          y={backdropFilterOffset}
+          width={backdropFilterSize}
+          height={backdropFilterSize}
+          primitiveUnits="objectBoundingBox"
+        >
+          <feFlood
+            x={backdropFloodOffset}
+            y={backdropFloodOffset}
+            width={backdropFloodSize}
+            height={backdropFloodSize}
+            floodColor={THEME.colors.bg.DEFAULT}
+            floodOpacity={0.5}
+          />
+          <feGaussianBlur
+            x={backdropFilterOffset}
+            y={backdropFilterOffset}
+            width={backdropFilterSize}
+            height={backdropFilterSize}
+            stdDeviation={BACKDROP_BLUR_RADIUS}
+            result="backdrop"
+          />
+          <feMerge>
+            <feMergeNode in="backdrop" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <MemoAxisTop
+        top={height}
+        scale={timeScale}
+        tickFormat={formatDateTick}
+        numTicks={timeTicks}
+        hideTicks
+        tickLength={0}
+        stroke={THEME.colors.text.DEFAULT}
+        tickStroke={THEME.colors.text.DEFAULT}
+        tickLabelProps={AXIS_LABEL_PROPS}
       />
     </svg>
   );

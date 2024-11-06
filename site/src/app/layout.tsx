@@ -3,7 +3,7 @@ import { config } from '@fortawesome/fontawesome-svg-core';
 import '@fortawesome/fontawesome-svg-core/styles.css';
 import './globals.css';
 import Providers from './providers';
-import { font } from './theme';
+import { THEME } from './theme';
 
 config.autoAddCss = false;
 
@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`overflow-x-hidden ${font.className}`}>
+      <body className={`overflow-x-hidden ${THEME.font.className}`}>
         <Providers>{children}</Providers>
       </body>
     </html>
