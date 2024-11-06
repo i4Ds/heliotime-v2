@@ -85,38 +85,38 @@ export const formatWatt: TickFormatter<NumberLike> = (value, index, values) => {
   const beforeMaxCoefficient = values.at(-2)!.value.valueOf() / maxMultiplier;
   // Measure coefficient step at top because on a 10^x border the upper part will first be split
   const coefficientStep = maxCoefficient - beforeMaxCoefficient;
-  // Multiply by 1.1 to counteract floating point errors where the step is 0.09999
-  let digits = -Math.floor(Math.log10(coefficientStep * 1.1));
+  // Multiply by 1.001 to counteract floating point errors where the step is 0.09999
+  let fractionDigits = -Math.floor(Math.log10(coefficientStep * 1.001));
 
   const coefficient = value.valueOf() / 10 ** exponent;
   // If coefficient is an int, show predefined ticks
-  if (digits === 0 && values.length > 7) {
+  if (fractionDigits === 0 && values.length > 7) {
     if (![1, 2, 5].includes(Math.round(coefficient))) return undefined;
   } else {
     const minExponent = Math.floor(minLogValue);
     const minCoefficient = minValue / 10 ** minExponent;
-    const coefficientDecimalNormalization = 10 ** (digits - 1);
+    const coefficientDecimalNormalization = 10 ** (fractionDigits - 1);
     const coefficientDecimalRange =
       // Multiply by 1.1 and 0.9 to account for float imprecision
-      Math.floor(maxCoefficient * coefficientDecimalNormalization * 1.1) -
-      Math.ceil(minCoefficient * coefficientDecimalNormalization * 0.9);
+      Math.floor(maxCoefficient * coefficientDecimalNormalization * 1.001) -
+      Math.ceil(minCoefficient * coefficientDecimalNormalization * 0.999);
 
     // If there is more than one tick with a coefficient ending with 0 only display those
     if (
       (coefficientDecimalRange < -1 || coefficientDecimalRange > 0) &&
       (minCoefficient <= 8 || maxCoefficient >= 2)
     ) {
-      if (!coefficient.toFixed(digits).endsWith('0')) return undefined;
-      digits -= 1;
+      if (!coefficient.toFixed(fractionDigits).endsWith('0')) return undefined;
+      fractionDigits -= 1;
 
       // Else show min, max, and middle value
     } else if (
-      !coefficient.toFixed(digits).endsWith('0') &&
+      !coefficient.toFixed(fractionDigits).endsWith('0') &&
       index !== 0 &&
       index !== values.length - 1 &&
       index !== Math.floor(values.length / 2)
     )
       return undefined;
   }
-  return `${coefficient.toFixed(digits)}×${baseText}`;
+  return `${coefficient.toFixed(fractionDigits)}×${baseText}`;
 };
