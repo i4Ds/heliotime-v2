@@ -6,7 +6,7 @@ import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line } from '@visx/shape';
 import { useTooltipInPortal } from '@visx/tooltip';
 import { bisector } from 'd3-array';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { panView, pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
@@ -105,6 +105,10 @@ export function MainChart(props: PositionSizeProps) {
   );
 
   const { containerRef: tooltipContainerRef, TooltipInPortal } = useTooltipInPortal();
+  // Force recalculation of tooltip position. Bug in visx.
+  useEffect(() => {
+    window.dispatchEvent(new Event('resize'));
+  }, [settings.showPreview]);
   const [hoverPoint, setHoverPoint] = useState<Point | undefined>();
   const hoverMeasurement = useMemo(() => {
     if (hoverPoint === undefined || series.length === 0) return undefined;
