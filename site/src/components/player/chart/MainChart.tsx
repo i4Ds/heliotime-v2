@@ -125,15 +125,6 @@ export function MainChart(props: PositionSizeProps) {
     };
   }, [hoverPoint, series, timeScale, wattScale]);
 
-  const handleClick = useCallback(
-    (event: React.MouseEvent<SVGElement>) => {
-      const point = localPoint(event);
-      if (point === null) return;
-      state.setTimestamp(timeScale.invert(point.x).getTime());
-    },
-    [state, timeScale]
-  );
-
   useWindowEvent(
     'wheel',
     (event) => {
@@ -153,20 +144,25 @@ export function MainChart(props: PositionSizeProps) {
     { passive: false }
   );
 
-  // Handle drag interactions
+  // Handle drag & click interactions
   const containerRef = useRef<SVGSVGElement>(null);
   const stack = useMemo(() => new PointerStack<Point | undefined>(2), []);
+  const clickPointerId = useRef<number | undefined>(undefined);
   const handlePointerDown = useCallback(
     (event: React.PointerEvent) => {
       if (shouldBrush(event)) return;
       const point = localPoint(event) ?? undefined;
       if (!stack.maybeAdd(event, point)) return;
       setHoverPoint(stack.length < 2 ? point : undefined);
+      if (stack.length === 1) clickPointerId.current = event.pointerId;
     },
     [stack]
   );
   useWindowEvent('pointermove', (event) => {
     if (containerRef.current === null || stack.length === 0 || !stack.has(event)) return;
+
+    // Moving the mouse cancels the click
+    clickPointerId.current = undefined;
 
     // Show tooltip if there is only one pointer
     const point = localPoint(containerRef.current, event) ?? undefined;
@@ -196,8 +192,17 @@ export function MainChart(props: PositionSizeProps) {
       )
     );
   });
-  useWindowEvent('pointerup', (event) => stack.maybeRemove(event));
-  useWindowEvent('pointercancel', (event) => stack.maybeRemove(event));
+  const handlePointerEnd = (event: PointerEvent) => {
+    stack.maybeRemove(event);
+
+    // Maybe handle click
+    if (stack.length > 0 || clickPointerId.current !== event.pointerId) return;
+    const point = localPoint(event);
+    if (point === null) return;
+    state.setTimestamp(timeScale.invert(point.x).getTime());
+  };
+  useWindowEvent('pointerup', handlePointerEnd);
+  useWindowEvent('pointercancel', handlePointerEnd);
 
   const handleHover = useCallback(
     (event: React.PointerEvent) => {
@@ -232,7 +237,6 @@ export function MainChart(props: PositionSizeProps) {
       height={height}
       x={left}
       y={top}
-      onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerOver={handleHover}
       onPointerMove={handleHover}
