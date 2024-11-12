@@ -10,7 +10,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { panView, pointerPanZoomView, wheelZoomView } from '@/utils/panZoom';
 import { Point } from '@visx/point';
 import { PointerStack } from '@/utils/pointer';
-import { useWindowEvent } from '@/utils/useWindowEvent';
+import { useWindowEvent } from '@/utils/window';
 import { THEME, toPx } from '@/app/theme';
 import { TextProps } from '@visx/text';
 import { useStableDebouncedFlux } from '@/api/flux/useFlux';

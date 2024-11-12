@@ -7,8 +7,13 @@ import { HelioPlayerStateProvider } from './state/state';
 import ChartHeader from './header/ChartHeader';
 import { MainChart } from './chart/MainChart';
 import BrushChart from './chart/BrushChart';
-import { HelioPlayerSettingsProvider } from './state/settings';
+import { HelioPlayerSettingsProvider, usePlayerSettings } from './state/settings';
 import { HelioPlayerPanProvider } from './state/pan';
+
+function MaybeHelioView() {
+  const [settings] = usePlayerSettings();
+  return settings.showPreview ? <HelioView className="hidden hmd:flex h-[40dvh]" /> : undefined;
+}
 
 interface HelioPlayerProps {
   className?: string;
@@ -24,7 +29,7 @@ export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
       <HelioPlayerStateProvider chartWidth={width}>
         <HelioPlayerPanProvider>
           <div className={`flex flex-col content-center gap-3 overflow-y-hidden ${className}`}>
-            <HelioView className="hidden hmd:flex h-[40dvh]" />
+            <MaybeHelioView />
             <ChartHeader />
             <div
               ref={parentRef}

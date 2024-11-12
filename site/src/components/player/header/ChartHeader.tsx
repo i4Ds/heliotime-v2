@@ -2,18 +2,18 @@ import {
   faAngleLeft,
   faAngleRight,
   faAnglesRight,
-  faArrowDownUpLock,
   faArrowUpRightFromSquare,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { getHelioviewerUrl } from '@/api/helioviewer';
 import { useMemo } from 'react';
-import { useWindowEvent } from '@/utils/useWindowEvent';
+import { useWindowEvent } from '@/utils/window';
 import { usePlayerRenderState, usePlayerState } from '../state/state';
 import IconButton from './IconButton';
 import { usePlayerSettings } from '../state/settings';
 import ShareButton from './ShareButton';
 import { usePanControl } from '../state/pan';
+import SettingsButton from './SettingsButton';
 
 const CHART_TITLE = 'Solar Activity Timeline';
 
@@ -87,20 +87,14 @@ export default function ChartHeader() {
             onPointerDown={() => panControl.start(false)}
             title="Pan left"
           />
-          <IconButton
-            icon={faArrowDownUpLock}
-            square={false}
-            className={`btn-tiny ${settings.lockWattAxis ? 'btn-invert' : ''}`}
-            onClick={() => changeSettings({ lockWattAxis: !settings.lockWattAxis })}
-            title="Lock watt axis"
-          />
+          <SettingsButton className="btn-tiny" />
           <ShareButton
             className="btn-tiny"
             data={() => ({ url: window.location.href, title: 'Heliotime' })}
             title="Share view"
           />
           <a
-            className="hmd:hidden btn btn-tiny btn-primary text-nowrap"
+            className={`${settings.showPreview ? 'hmd:hidden' : ''} btn btn-tiny btn-primary text-nowrap`}
             href={viewerUrl}
             target="_blank"
             rel="noopener"

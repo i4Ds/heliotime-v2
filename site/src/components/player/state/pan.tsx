@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import { useInterval } from '@/utils/useInterval';
 import { panView } from '@/utils/panZoom';
-import { useWindowEvent } from '@/utils/useWindowEvent';
+import { useWindowEvent } from '@/utils/window';
 import { MIN_FRAME_INTERVAL_MS } from './settings';
 import { usePlayerState } from './state';
 

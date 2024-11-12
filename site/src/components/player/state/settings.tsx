@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 export interface HelioPlayerSettings {
   readonly isFollowing: boolean;
   readonly lockWattAxis: boolean;
+  readonly showPreview: boolean;
 }
 
 // Hardcoded settings
@@ -14,6 +15,7 @@ export const MIN_VIEW_SIZE_MS = 5 * 60 * 1000;
 const DEFAULT_SETTINGS: HelioPlayerSettings = {
   isFollowing: true,
   lockWattAxis: true,
+  showPreview: true,
 };
 
 export type HelioPlayerSettingsChanger = (change: Partial<HelioPlayerSettings>) => void;
@@ -31,6 +33,7 @@ export const usePlayerSettings = () => useContext(HelioPlayerSettingsContext);
 
 const SEARCH_PARAMS = {
   lockWattAxis: parseAsBoolean.withDefault(true),
+  showPreview: parseAsBoolean.withDefault(true),
 } as const;
 
 export function HelioPlayerSettingsProvider({ children }: React.PropsWithChildren) {

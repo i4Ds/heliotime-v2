@@ -34,6 +34,13 @@ export const THEME = {
     md: '1rem',
     full: '9999px',
   },
+  screen: {
+    xs: 480,
+    md: 768,
+    lg: 1024,
+    xl: 1280,
+    '2xl': 1536,
+  },
   // From https://tailwindcss.com/docs/font-size
   textSize: {
     xs: { fontSize: '0.75rem', lineHeight: '1rem' },

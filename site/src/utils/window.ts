@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 
 export type EventListener<EventType extends keyof WindowEventMap> = (
@@ -22,4 +23,32 @@ export function useWindowEvent<EventType extends keyof WindowEventMap>(
     window.addEventListener(eventType, listener, options);
     return () => window.removeEventListener(eventType, listener);
   }, [eventType, options]);
+}
+
+interface Size {
+  width: number;
+  height: number;
+}
+
+export function useWindowSize(): Size {
+  const [size, setSize] = useState(() =>
+    typeof window === 'undefined'
+      ? {
+          width: 0,
+          height: 0,
+        }
+      : {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }
+  );
+  useEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      setSize({ width, height });
+    });
+    observer.observe(document.documentElement);
+    return () => observer.disconnect();
+  }, []);
+  return size;
 }

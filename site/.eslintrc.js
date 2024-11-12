@@ -94,6 +94,10 @@ module.exports = {
     // Default props is being deprecated: https://matan.io/posts/react-defaultprops-is-dying
     // Use ES6 destructing defaults instead.
     'react/require-default-props': 'off',
+    // Add custom input components
+    "jsx-a11y/label-has-associated-control": [ 'error', {
+      "controlComponents": ["Switch"],
+    }],
 
     // Copied from https://github.com/airbnb/javascript/issues/1536#issuecomment-547416680
     'unicorn/import-index': 'off',

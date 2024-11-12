@@ -41,7 +41,9 @@
 
 @layer components {
   .btn {
-    @apply bg-bg-1 hover:bg-bg-2 hover:text-text-focus active:bg-bg-0 active:text-text-dim text-center rounded-sm px-3 py-1.5;
+    @apply bg-bg-1 hover:bg-bg-2 hover:text-text-focus active:bg-bg-0 active:text-text-dim text-center rounded-sm px-3 py-1.5
+    focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-focus
+    disabled:cursor-not-allowed disabled:opacity-60;
   }
   .btn-primary {
     @apply bg-primary hover:bg-primary-tint hover:text-bg-1 active:bg-primary-shade active:text-bg text-bg;

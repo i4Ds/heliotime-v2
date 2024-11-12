@@ -1,6 +1,6 @@
 import { NumberRange } from '@/utils/range';
 import { useMemo } from 'react';
-import { useWindowEvent } from '@/utils/useWindowEvent';
+import { useWindowEvent } from '@/utils/window';
 import { localPoint } from '@visx/event';
 import { useVolatile, useVolatileState } from '@/utils/useVolatile';
 import { limitView } from '@/utils/panZoom';
