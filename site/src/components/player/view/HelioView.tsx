@@ -93,15 +93,17 @@ export default function HelioView({ className = '' }: HelioViewProps) {
           <wbr />
           {`${state.closestImageTimestamp === undefined ? 'unknown' : formatDate(state.closestImageTimestamp)} `}
           {!state.isCloseEnough && (
-            <FontAwesomeIcon
-              icon={faTriangleExclamation}
-              className="text-warn"
+            <span
+              // Cannot pass title directly to icon because it will cause SSR mismatches.
+              // See: https://github.com/FortAwesome/react-fontawesome/issues/550
               title={
                 state.closestImageTimestamp === undefined
                   ? 'Capture time is unknown'
                   : 'Capture time is far from selected time'
               }
-            />
+            >
+              <FontAwesomeIcon icon={faTriangleExclamation} className="text-warn" />
+            </span>
           )}
         </div>
         {isLoading && (
