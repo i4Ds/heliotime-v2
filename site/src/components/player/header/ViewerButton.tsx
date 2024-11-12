@@ -1,0 +1,29 @@
+import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useMemo } from 'react';
+import { HelioviewerSource } from '@/api/helioviewer';
+import { usePlayerRenderState } from '../state/state';
+
+interface ViewerButtonProps {
+  className?: string;
+}
+
+export function ViewerButton({ className = '' }: ViewerButtonProps) {
+  const { timestamp } = usePlayerRenderState();
+
+  const source = useMemo(() => HelioviewerSource.select(timestamp), [timestamp]);
+  const viewerUrl = useMemo(() => source.getViewerUrl(new Date(timestamp)), [source, timestamp]);
+  return (
+    <a
+      className={`btn btn-primary text-nowrap ${className}`}
+      href={viewerUrl}
+      target="_blank"
+      rel="noopener"
+      title="View on Helioviewer"
+    >
+      <span className="hidden md:inline">Helioviewer </span>
+      <span className="md:hidden">HV </span>
+      <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+    </a>
+  );
+}

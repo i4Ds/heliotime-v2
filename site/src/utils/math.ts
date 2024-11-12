@@ -6,6 +6,10 @@ export function resFloor(value: number, resolution: number): number {
   return Math.floor(value / resolution) * resolution;
 }
 
+export function resRound(value: number, resolution: number): number {
+  return Math.round(value / resolution) * resolution;
+}
+
 export function log(value: number, base: number): number {
   return Math.log(value) / Math.log(base);
 }

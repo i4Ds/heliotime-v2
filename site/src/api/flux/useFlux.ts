@@ -26,7 +26,6 @@ export function fluxQueryOptions(from: number, to: number, resolution: number) {
     staleTime: ({ state }) => 1000 * (isLiveComplete(state.data, to) ? 60 : 10),
     refetchInterval: ({ state }) => 60 * 1000 * (isLiveComplete(state.data, to) ? 10 : 1),
     gcTime: 10 * 1000,
-    // placeholderData: lastFetch!.current?.selectData(from, to),
   });
 }
 

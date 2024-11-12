@@ -17,4 +17,10 @@ export default withBundleAnalyzer({
       },
     ],
   },
+  rewrites: () => [
+    {
+      source: '/helioviewer/v2/getClosestImage',
+      destination: 'https://api.helioviewer.org/v2/getClosestImage/',
+    }
+  ]
 });

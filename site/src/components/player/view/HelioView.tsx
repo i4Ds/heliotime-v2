@@ -1,9 +1,9 @@
-import { getHelioviewerUrl, getSolarImageUrl } from '@/api/helioviewer';
-import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
+import { HelioviewerSource } from '@/api/helioviewer';
+import { faArrowUpRightFromSquare, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Image, { ImageLoader } from 'next/image';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { resFloor } from '@/utils/math';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { usePlayerRenderState } from '../state/state';
 
 const viewActionText = 'View on Helioviewer';
@@ -26,20 +26,43 @@ export interface HelioViewProps {
 }
 
 export default function HelioView({ className = '' }: HelioViewProps) {
-  const { timestamp } = usePlayerRenderState();
-  // The SDO AIA images have a 12-second cadence. We floor to the nearest second.
-  const flooredTimestamp = resFloor(timestamp, 1000);
-  const date = useMemo(() => new Date(flooredTimestamp), [flooredTimestamp]);
+  const { view, timestamp } = usePlayerRenderState();
+  const source = useMemo(() => HelioviewerSource.select(timestamp), [timestamp]);
+  // Prefer the unrounded timestamp for the viewer URL.
+  // In very very rare cases, that might load a slightly different image.
+  const viewerUrl = useMemo(() => source.getViewerUrl(new Date(timestamp)), [source, timestamp]);
 
-  const viewerUrl = useMemo(() => getHelioviewerUrl(date), [date]);
-  const getImageUrl: ImageLoader = useCallback(
-    ({ width }) => getSolarImageUrl(date, width),
-    [date]
+  // Get image infos. Round timestamp to improve cache hits.
+  const roundedTimestamp = source.roundTimestamp(timestamp);
+  const getClosestImageUrl: ImageLoader = useCallback(
+    ({ width }) => source.getClosestImageUrl(new Date(roundedTimestamp), width),
+    [roundedTimestamp, source]
+  );
+  const closestImageTimestamp = useQuery({
+    queryKey: [source, roundedTimestamp],
+    queryFn: () => source.fetchClosestImageTimestamp(new Date(roundedTimestamp)),
+  }).data;
+
+  // Check if loaded image is close enough to the selected timestamp.
+  const isCloseEnough = useMemo(() => {
+    if (closestImageTimestamp === undefined) return false;
+    const acceptableDeltaMs = (view[1] - view[0]) / 100;
+    return Math.abs(closestImageTimestamp.getTime() - timestamp) < acceptableDeltaMs;
+  }, [closestImageTimestamp, timestamp, view]);
+
+  // Once the loader changes, the image is loading.
+  const [lastImageLoader, setLastImageLoader] = useState<ImageLoader | undefined>(undefined);
+  const isLoading = getClosestImageUrl !== lastImageLoader;
+  const markLoaded = useCallback(
+    () => setLastImageLoader(() => getClosestImageUrl),
+    [getClosestImageUrl]
   );
 
-  const [isLoading, setIsLoading] = useState(false);
-  useEffect(() => setIsLoading(true), [date]);
-  const markLoaded = useCallback(() => setIsLoading(false), []);
+  // Keep the last load state while loading.
+  const lastLoadState = useRef({ name: source.name, closestImageTimestamp, isCloseEnough });
+  if (!isLoading)
+    lastLoadState.current = { name: source.name, closestImageTimestamp, isCloseEnough };
+  const state = lastLoadState.current;
 
   return (
     <div className={`flex flex-col justify-center items-center gap-2 ${className}`}>
@@ -52,8 +75,8 @@ export default function HelioView({ className = '' }: HelioViewProps) {
       >
         <Image
           src="_" // Required but useless
-          loader={getImageUrl}
-          alt="Sun imaged by SDO"
+          loader={getClosestImageUrl}
+          alt={`Sun imaged by ${state.name}`}
           priority
           fill
           sizes="30dvh"
@@ -62,8 +85,24 @@ export default function HelioView({ className = '' }: HelioViewProps) {
           onLoad={markLoaded}
           onError={markLoaded}
         />
-        <div className="absolute w-full px-2 bottom-1 text-center text-xs text-text-dim">
-          Imaged by SDO at {formatDate(date)}
+        <div
+          className="absolute w-full px-2 bottom-1 text-center text-xs text-text-dim whitespace-nowrap"
+          style={{ textShadow: '0 0 5px black, 0 0 5px black' }}
+        >
+          {`Imaged by ${state.name} at `}
+          <wbr />
+          {`${state.closestImageTimestamp === undefined ? 'unknown' : formatDate(state.closestImageTimestamp)} `}
+          {!state.isCloseEnough && (
+            <FontAwesomeIcon
+              icon={faTriangleExclamation}
+              className="text-warn"
+              title={
+                state.closestImageTimestamp === undefined
+                  ? 'Capture time is unknown'
+                  : 'Capture time is far from selected time'
+              }
+            />
+          )}
         </div>
         {isLoading && (
           <div className="absolute size-full flex items-center justify-center backdrop-blur-sm bg-bg bg-opacity-20">

@@ -2,11 +2,7 @@ import {
   faAngleLeft,
   faAngleRight,
   faAnglesRight,
-  faArrowUpRightFromSquare,
 } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { getHelioviewerUrl } from '@/api/helioviewer';
-import { useMemo } from 'react';
 import { useWindowEvent } from '@/utils/window';
 import { usePlayerRenderState, usePlayerState } from '../state/state';
 import IconButton from './IconButton';
@@ -14,11 +10,12 @@ import { usePlayerSettings } from '../state/settings';
 import ShareButton from './ShareButton';
 import { usePanControl } from '../state/pan';
 import SettingsButton from './SettingsButton';
+import { ViewerButton } from './ViewerButton';
 
 const CHART_TITLE = 'Solar Activity Timeline';
 
 export default function ChartHeader() {
-  const { range, view, timestamp } = usePlayerRenderState();
+  const { range, view } = usePlayerRenderState();
   const state = usePlayerState();
   const [settings, changeSettings] = usePlayerSettings();
 
@@ -26,7 +23,6 @@ export default function ChartHeader() {
   useWindowEvent('pointerup', () => panControl.stop());
   useWindowEvent('pointercancel', () => panControl.stop());
 
-  const viewerUrl = useMemo(() => getHelioviewerUrl(new Date(timestamp)), [timestamp]);
   return (
     <>
       <h1 className="sm:hidden text-center">{CHART_TITLE}</h1>
@@ -93,17 +89,7 @@ export default function ChartHeader() {
             data={() => ({ url: window.location.href, title: 'Heliotime' })}
             title="Share view"
           />
-          <a
-            className={`${settings.showPreview ? 'hmd:hidden' : ''} btn btn-tiny btn-primary text-nowrap`}
-            href={viewerUrl}
-            target="_blank"
-            rel="noopener"
-            title="View on Helioviewer"
-          >
-            <span className="hidden md:inline">Helioviewer </span>
-            <span className="md:hidden">HV </span>
-            <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
-          </a>
+          <ViewerButton className={`${settings.showPreview ? 'hmd:hidden' : ''} btn-tiny`} />
         </div>
       </div>
     </>
