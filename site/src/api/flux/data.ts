@@ -16,8 +16,10 @@ export function selectFluxSections(
   start?: number,
   end?: number
 ): FluxSections {
-  const firstInclusive = start && sections.findIndex((section) => start < section.at(-1)![0]);
-  const lastExclusive = end && sections.findLastIndex((section) => section[0][0] < end) + 1;
+  const firstInclusive =
+    start && sections.findIndex((section) => section.length > 0 && start < section.at(-1)![0]);
+  const lastExclusive =
+    end && sections.findLastIndex((section) => section.length > 0 && section[0][0] < end) + 1;
   if (firstInclusive === -1 || lastExclusive === -1) return [];
   const filteredSections = sections.slice(firstInclusive, lastExclusive);
   return filteredSections.map((section, index) =>
