@@ -193,13 +193,14 @@ export function MainChart(props: PositionSizeProps) {
     );
   });
   const handlePointerEnd = (event: PointerEvent) => {
-    stack.maybeRemove(event);
+    if (!stack.maybeRemove(event)) return;
 
     // Maybe handle click
     if (stack.length > 0 || clickPointerId.current !== event.pointerId) return;
     const point = localPoint(event);
     if (point === null) return;
     state.setTimestamp(timeScale.invert(point.x).getTime());
+    clickPointerId.current = undefined;
   };
   useWindowEvent('pointerup', handlePointerEnd);
   useWindowEvent('pointercancel', handlePointerEnd);
