@@ -4,6 +4,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Image, { ImageLoader } from 'next/image';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import React from 'react';
+import { expFloor } from '@/utils/math';
 import { usePlayerRenderState } from '../state/state';
 
 const viewActionText = 'View on Helioviewer';
@@ -25,8 +27,11 @@ export interface HelioViewProps {
   className?: string;
 }
 
-export default function HelioView({ className = '' }: HelioViewProps) {
-  const { view, timestamp } = usePlayerRenderState();
+function InternalHelioView({
+  className = '',
+  viewSize,
+  timestamp,
+}: HelioViewProps & { viewSize: number; timestamp: number }) {
   const source = useMemo(() => HelioviewerSource.select(timestamp), [timestamp]);
   // Prefer the unrounded timestamp for the viewer URL.
   // In very very rare cases, that might load a slightly different image.
@@ -46,9 +51,9 @@ export default function HelioView({ className = '' }: HelioViewProps) {
   // Check if loaded image is close enough to the selected timestamp.
   const isCloseEnough = useMemo(() => {
     if (closestImageTimestamp === undefined) return false;
-    const acceptableDeltaMs = (view[1] - view[0]) / 100;
+    const acceptableDeltaMs = viewSize / 100;
     return Math.abs(closestImageTimestamp.getTime() - timestamp) < acceptableDeltaMs;
-  }, [closestImageTimestamp, timestamp, view]);
+  }, [closestImageTimestamp, timestamp, viewSize]);
 
   // Once the loader changes, the image is loading.
   const [lastImageLoader, setLastImageLoader] = useState<ImageLoader | undefined>(undefined);
@@ -116,5 +121,19 @@ export default function HelioView({ className = '' }: HelioViewProps) {
         {viewActionText} <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="ml-0.5" />
       </a>
     </div>
+  );
+}
+
+const MemoHelioView = React.memo(InternalHelioView);
+
+export default function HelioView(props: HelioViewProps) {
+  const { view, timestamp } = usePlayerRenderState();
+  return (
+    <MemoHelioView
+      // eslint-disable-next-line react/jsx-props-no-spreading
+      {...props}
+      viewSize={expFloor(view[1] - view[0], 1.1)}
+      timestamp={timestamp}
+    />
   );
 }

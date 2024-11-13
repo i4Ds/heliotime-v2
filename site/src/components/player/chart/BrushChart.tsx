@@ -1,12 +1,19 @@
 import { useStableDebouncedFlux } from '@/api/flux/useFlux';
-import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { THEME } from '@/app/theme';
 import { PositionSizeProps } from '@/components/svg/base';
-import Brush from '@/components/svg/Brush';
-import { Line } from '@visx/shape';
-import { calcTimeTicks, formatDateTick, MAX_WATT_EXTENT, MemoAxisTop } from './utils';
+import { BrushView, MemoBrush } from '@/components/svg/Brush';
+import React from 'react';
+import { resRound } from '@/utils/math';
+import {
+  calcTimeTicks,
+  formatDateTick,
+  MAX_WATT_EXTENT,
+  MemoAxisTop,
+  MemoGridColumns,
+  MemoLine,
+} from './utils';
 import FluxLine from './FluxLine';
 import { usePlayerState, usePlayerRenderState } from '../state/state';
 import { MIN_VIEW_SIZE_MS } from '../state/settings';
@@ -25,6 +32,44 @@ const backdropFilterOffset = -BACKDROP_PADDING - BACKDROP_BLUR_RADIUS;
 const backdropFilterSize = 1 + 2 * BACKDROP_PADDING + 2 * BACKDROP_BLUR_RADIUS;
 const backdropFloodOffset = -BACKDROP_PADDING;
 const backdropFloodSize = 1 + 2 * BACKDROP_PADDING;
+
+function LabelBackdropFilter() {
+  return (
+    <defs>
+      <filter
+        id="label-backdrop"
+        x={backdropFilterOffset}
+        y={backdropFilterOffset}
+        width={backdropFilterSize}
+        height={backdropFilterSize}
+        primitiveUnits="objectBoundingBox"
+      >
+        <feFlood
+          x={backdropFloodOffset}
+          y={backdropFloodOffset}
+          width={backdropFloodSize}
+          height={backdropFloodSize}
+          floodColor={THEME.colors.bg.DEFAULT}
+          floodOpacity={0.5}
+        />
+        <feGaussianBlur
+          x={backdropFilterOffset}
+          y={backdropFilterOffset}
+          width={backdropFilterSize}
+          height={backdropFilterSize}
+          stdDeviation={BACKDROP_BLUR_RADIUS}
+          result="backdrop"
+        />
+        <feMerge>
+          <feMergeNode in="backdrop" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+  );
+}
+
+const MemoLabelBackdropFilter = React.memo(LabelBackdropFilter);
 
 export default function BrushChart({ width, height, top, left }: PositionSizeProps) {
   const state = usePlayerState();
@@ -49,12 +94,33 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
     [height]
   );
 
-  const cursorX = useMemo(() => timeScale(timestamp), [timeScale, timestamp]);
   const timeTicks = calcTimeTicks(width);
+  const cursorX = useMemo(() => timeScale(timestamp), [timeScale, timestamp]);
+
+  const brushStart = resRound(timeScale(view[0]), 0.5);
+  const brushEnd = resRound(timeScale(view[1]), 0.5);
+  const brushView = useMemo<BrushView>(() => [brushStart, brushEnd], [brushEnd, brushStart]);
+  const onBrushStart = useCallback(
+    (isDrawingNew: boolean) => {
+      if (!isDrawingNew) return;
+      state.setView(state.view(), true);
+    },
+    [state]
+  );
+  const onBrush = useCallback(
+    (newView: BrushView) =>
+      state.setView(
+        newView === undefined
+          ? range
+          : [timeScale.invert(newView[0]).getTime(), timeScale.invert(newView[1]).getTime()]
+      ),
+    [state, timeScale, range]
+  );
+
   return (
     <svg width={width} height={height} y={top} x={left} className="overflow-visible">
       {/* Background */}
-      <GridColumns
+      <MemoGridColumns
         scale={timeScale}
         height={height}
         numTicks={timeTicks}
@@ -68,59 +134,20 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
       <rect width={width} height={height} fill="transparent" className="stroke-bg-2" />
 
       {/* Current view and timestamp */}
-      <Line y1={0} y2={height} x1={cursorX} x2={cursorX} className="stroke-primary" />
-      <Brush
+      <MemoLine y1={0} y2={height} x1={cursorX} x2={cursorX} className="stroke-primary" />
+      <MemoBrush
         width={width}
         height={height}
-        view={[timeScale(view[0]), timeScale(view[1])]}
-        minSize={timeScale(range[0] + MIN_VIEW_SIZE_MS)}
+        view={brushView}
+        minSize={resRound(timeScale(range[0] + MIN_VIEW_SIZE_MS), 0.5)}
         allowOverflow
         clickViewSize={30}
-        onBrushStart={(isDrawingNew) => {
-          if (!isDrawingNew) return;
-          state.setView(state.view(), true);
-        }}
-        onBrush={(newView) =>
-          state.setView(
-            newView === undefined
-              ? range
-              : [timeScale.invert(newView[0]).getTime(), timeScale.invert(newView[1]).getTime()]
-          )
-        }
+        onBrushStart={onBrushStart}
+        onBrush={onBrush}
       />
 
       {/* Axis */}
-      <defs>
-        <filter
-          id="label-backdrop"
-          x={backdropFilterOffset}
-          y={backdropFilterOffset}
-          width={backdropFilterSize}
-          height={backdropFilterSize}
-          primitiveUnits="objectBoundingBox"
-        >
-          <feFlood
-            x={backdropFloodOffset}
-            y={backdropFloodOffset}
-            width={backdropFloodSize}
-            height={backdropFloodSize}
-            floodColor={THEME.colors.bg.DEFAULT}
-            floodOpacity={0.5}
-          />
-          <feGaussianBlur
-            x={backdropFilterOffset}
-            y={backdropFilterOffset}
-            width={backdropFilterSize}
-            height={backdropFilterSize}
-            stdDeviation={BACKDROP_BLUR_RADIUS}
-            result="backdrop"
-          />
-          <feMerge>
-            <feMergeNode in="backdrop" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
+      <MemoLabelBackdropFilter />
       <MemoAxisTop
         top={height}
         scale={timeScale}

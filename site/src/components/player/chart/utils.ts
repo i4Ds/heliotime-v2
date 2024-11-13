@@ -2,13 +2,17 @@ import { FluxSeries } from '@/api/flux/data';
 import { NumberRange } from '@/utils/range';
 import { toSuperScript } from '@/utils/super';
 import { AxisBottom, AxisLeft, AxisTop, TickFormatter } from '@visx/axis';
+import { GridColumns } from '@visx/grid';
 import { NumberLike } from '@visx/scale';
+import { Line } from '@visx/shape';
 import { extent } from 'd3-array';
 import { memo } from 'react';
 
 export const MemoAxisLeft = memo(AxisLeft);
 export const MemoAxisBottom = memo(AxisBottom);
 export const MemoAxisTop = memo(AxisTop);
+export const MemoGridColumns = memo(GridColumns);
+export const MemoLine = memo(Line);
 
 export function timeExtent(navData: FluxSeries | undefined): NumberRange | undefined {
   return (navData?.length ?? 0) === 0 ? undefined : [navData![0][0], Date.now()];

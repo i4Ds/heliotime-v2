@@ -36,6 +36,12 @@ const SEARCH_PARAMS = {
   showPreview: parseAsBoolean.withDefault(true),
 } as const;
 
+function isChangeRedundant(settings: HelioPlayerSettings, change: Partial<HelioPlayerSettings>) {
+  return Object.keys(change).every(
+    (key) => settings[key as keyof typeof settings] === change[key as keyof typeof change]
+  );
+}
+
 export function HelioPlayerSettingsProvider({ children }: React.PropsWithChildren) {
   const [querySettings, setQuerySettings] = useQueryStates(SEARCH_PARAMS, { clearOnDefault: true });
   const [settings, setSettings] = useState<HelioPlayerSettings>(() => ({
@@ -45,18 +51,17 @@ export function HelioPlayerSettingsProvider({ children }: React.PropsWithChildre
 
   // Always sync query with settings as history navigation should not change them.
   useEffect(() => {
-    const isQueryDifferent = Object.keys(querySettings).some(
-      (key) =>
-        settings[key as keyof typeof querySettings] !==
-        querySettings[key as keyof typeof querySettings]
-    );
     // Skip update if already in sync to avoid infinite loop
-    if (!isQueryDifferent) return;
+    if (isChangeRedundant(settings, querySettings)) return;
     setQuerySettings(settings);
   }, [settings, setQuerySettings, querySettings]);
 
   const changeSettings: HelioPlayerSettingsChanger = useCallback(
-    (change) => setSettings((previous) => ({ ...previous, ...change })),
+    (change) =>
+      setSettings((previous) => {
+        if (isChangeRedundant(previous, change)) return previous;
+        return { ...previous, ...change };
+      }),
     []
   );
   const settingsUse = useMemo(

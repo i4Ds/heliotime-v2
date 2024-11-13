@@ -3,12 +3,14 @@ import { D3Scale } from '@visx/scale';
 import { THEME } from '@/app/theme';
 import { HorizontalBand } from '@/components/svg/HorizontalBand';
 import { PositionSizeProps } from '@/components/svg/base';
+import React from 'react';
 
 export interface FlareClassBandsProps extends PositionSizeProps {
   scale: D3Scale<number>;
 }
 
-export default function FlareClassBands({
+// eslint-disable-next-line prefer-arrow-callback
+export default React.memo(function FlareClassBands({
   width,
   height,
   top = 0,
@@ -47,4 +49,4 @@ export default function FlareClassBands({
       </Text>
     </>
   );
-}
+});

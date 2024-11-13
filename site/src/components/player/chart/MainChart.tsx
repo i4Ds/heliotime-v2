@@ -1,7 +1,6 @@
 import { FluxMeasurement } from '@/api/flux/data';
 import { TickLabelProps } from '@visx/axis';
 import { localPoint } from '@visx/event';
-import { GridColumns } from '@visx/grid';
 import { scaleLog, scaleUtc } from '@visx/scale';
 import { Circle, Line } from '@visx/shape';
 import { useTooltipInPortal } from '@visx/tooltip';
@@ -25,6 +24,7 @@ import {
   MAX_WATT_EXTENT,
   MemoAxisBottom,
   MemoAxisLeft,
+  MemoGridColumns,
   wattExtent,
 } from './utils';
 import FlareClassBands from './FlareClassBands';
@@ -74,11 +74,15 @@ export function MainChart(props: PositionSizeProps) {
 
   const timeLabelOffset = 40;
   const wattLabelOffset = settings.lockWattAxis ? 40 : 70;
-  const { width, height, top, left } = applyMargin(props, {
-    left: wattLabelOffset + 20,
-    right: 48,
-    bottom: timeLabelOffset + 20,
-  });
+  const { width, height, top, left } = useMemo(
+    () =>
+      applyMargin(props, {
+        left: wattLabelOffset + 20,
+        right: 48,
+        bottom: timeLabelOffset + 20,
+      }),
+    [props, wattLabelOffset, timeLabelOffset]
+  );
 
   const data = useStableDebouncedFlux(view[0], view[1], width);
   const series = useMemo(() => data.flat(), [data]);
@@ -250,7 +254,7 @@ export function MainChart(props: PositionSizeProps) {
 
       {/* Background */}
       <FlareClassBands width={width} height={height} scale={wattScale} />
-      <GridColumns
+      <MemoGridColumns
         scale={timeScale}
         height={height}
         numTicks={desiredTimeTicks}

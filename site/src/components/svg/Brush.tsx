@@ -6,6 +6,7 @@ import { useVolatile, useVolatileState } from '@/utils/useVolatile';
 import { limitView } from '@/utils/panZoom';
 import { PointerStack } from '@/utils/pointer';
 import { Line } from '@visx/shape';
+import React from 'react';
 import { PositionSizeProps } from './base';
 
 const TOUCH_EDGE_WIDTH = 15;
@@ -231,3 +232,5 @@ export default function Brush({
     </svg>
   );
 }
+
+export const MemoBrush = React.memo(Brush);

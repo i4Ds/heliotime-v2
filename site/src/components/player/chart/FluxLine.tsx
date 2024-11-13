@@ -12,9 +12,10 @@ export interface FluxLineProps {
 
 // eslint-disable-next-line prefer-arrow-callback
 export default memo(function FluxLine({ data, timeScale, wattScale }: FluxLineProps) {
-  return data.map((section) => (
+  return data.map((section, index) => (
     <LinePath
-      key={section[0][0]}
+      // Use newest timestamp of oldest section to keep the ID stable while panning.
+      key={section.at(index === 0 ? -1 : 0)![0]}
       curve={curveMonotoneX}
       data={section}
       x={(d) => timeScale(d[0])}
