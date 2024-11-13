@@ -9,10 +9,21 @@ import { MainChart } from './chart/MainChart';
 import BrushChart from './chart/BrushChart';
 import { HelioPlayerSettingsProvider, usePlayerSettings } from './state/settings';
 import { HelioPlayerPanProvider } from './state/pan';
+import RepoLink from '../links/RepoLink';
+import FhnwLink from '../links/FhnwLink';
 
 function MaybeHelioView() {
   const [settings] = usePlayerSettings();
-  return settings.showPreview ? <HelioView className="hidden hmd:flex h-[40dvh]" /> : undefined;
+  if (!settings.showPreview) return undefined;
+  return (
+    <>
+      <HelioView className="hidden hmd:flex h-[40dvh]" />
+      <div className="absolute right-4 top-4 hidden sm:hmd:flex flex-row items-center text-3xl space-x-3">
+        <FhnwLink />
+        <RepoLink />
+      </div>
+    </>
+  );
 }
 
 interface HelioPlayerProps {

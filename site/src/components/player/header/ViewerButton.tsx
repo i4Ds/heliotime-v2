@@ -23,8 +23,8 @@ function InternalViewerButton({
       rel="noopener"
       title="View on Helioviewer"
     >
-      <span className="hidden md:inline">Helioviewer </span>
-      <span className="md:hidden">HV </span>
+      <span className="hidden lg:inline">Helioviewer </span>
+      <span className="lg:hidden">HV </span>
       <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
     </a>
   );

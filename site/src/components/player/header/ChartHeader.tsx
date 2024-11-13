@@ -1,5 +1,7 @@
 import { faAngleLeft, faAngleRight, faAnglesRight } from '@fortawesome/free-solid-svg-icons';
 import { useWindowEvent } from '@/utils/window';
+import RepoLink from '@/components/links/RepoLink';
+import FhnwLink from '@/components/links/FhnwLink';
 import { usePlayerState } from '../state/state';
 import IconButton from './IconButton';
 import { usePlayerSettings } from '../state/settings';
@@ -25,6 +27,8 @@ export default function ChartHeader() {
       <div className="flex overflow-x-auto gap-2">
         <div className="flex-grow basis-0 flex items-center gap-2">
           <RangeButtons />
+          <RepoLink className={`${settings.showPreview ? 'sm:hmd:hidden' : undefined} px-0.5`} />
+          <FhnwLink className={`${settings.showPreview ? 'sm:hmd:hidden' : undefined} px-0.5`} />
         </div>
         <h1 className="hidden sm:block overflow-x-auto text-nowrap select-text">{CHART_TITLE}</h1>
         <div className="flex-grow basis-0 flex items-center flex-row-reverse gap-2">
