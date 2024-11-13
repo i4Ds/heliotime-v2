@@ -55,7 +55,7 @@ export default function ChartHeader() {
           <SettingsButton className="btn-tiny" />
           <ShareButton
             className="btn-tiny"
-            data={() => ({ url: window.location.href, title: 'Heliotime' })}
+            data={() => ({ url: globalThis.location.href, title: 'Heliotime' })}
             title="Share view"
           />
           <ViewerButton className={`${settings.showPreview ? 'hmd:hidden' : ''} btn-tiny`} />

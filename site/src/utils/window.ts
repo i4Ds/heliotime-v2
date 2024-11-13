@@ -20,8 +20,8 @@ export function useWindowEvent<EventType extends keyof WindowEventMap>(
 
   useEffect(() => {
     const listener = (event: WindowEventMap[EventType]) => savedCallback.current(event);
-    window.addEventListener(eventType, listener, options);
-    return () => window.removeEventListener(eventType, listener);
+    globalThis.addEventListener(eventType, listener, options);
+    return () => globalThis.removeEventListener(eventType, listener);
   }, [eventType, options]);
 }
 
@@ -32,6 +32,7 @@ interface Size {
 
 export function useWindowSize(): Size {
   const [size, setSize] = useState(() =>
+    // eslint-disable-next-line unicorn/prefer-global-this
     typeof window === 'undefined'
       ? {
           width: 0,

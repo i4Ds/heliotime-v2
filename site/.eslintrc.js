@@ -7,7 +7,6 @@ module.exports = {
   plugins: ['@typescript-eslint', 'import', 'unicorn', 'react', '@tanstack/query'],
   extends: [
     'airbnb',
-    'airbnb/hooks',
     'airbnb-typescript',
     'plugin:@typescript-eslint/recommended',
     'plugin:import/typescript',

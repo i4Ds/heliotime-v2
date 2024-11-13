@@ -111,7 +111,7 @@ export function MainChart(props: PositionSizeProps) {
   const { containerRef: tooltipContainerRef, TooltipInPortal } = useTooltipInPortal();
   // Force recalculation of tooltip position. Bug in visx.
   useEffect(() => {
-    window.dispatchEvent(new Event('resize'));
+    globalThis.dispatchEvent(new Event('resize'));
   }, [settings.showPreview]);
   const [hoverPoint, setHoverPoint] = useState<Point | undefined>();
   const hoverMeasurement = useMemo(() => {

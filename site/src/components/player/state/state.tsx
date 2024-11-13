@@ -148,6 +148,7 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
 
   // Follow live time
   // Reduce refresh rate when zoomed out
+  // eslint-disable-next-line unicorn/prefer-global-this
   const pixelRatio = typeof window === 'object' ? window.devicePixelRatio : 1;
   const liveRelevantView = settings.isFollowing ? renderView : renderRange;
   const liveIntervalsMs = Math.max(

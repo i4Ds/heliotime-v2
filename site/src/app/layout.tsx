@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { config } from '@fortawesome/fontawesome-svg-core';
 import '@fortawesome/fontawesome-svg-core/styles.css';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import './globals.css';
 import Providers from './providers';
 import { THEME } from './theme';
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`overflow-x-hidden ${THEME.font.className}`}>
-        <Providers>{children}</Providers>
+        <NuqsAdapter>
+          <Providers>{children}</Providers>
+        </NuqsAdapter>
       </body>
     </html>
   );
