@@ -205,10 +205,10 @@ def _check_group_connectivity(
         # Maybe close uncertainty section
         if section_start is not None:
             section_end = None
-            # If group is big enough to end the gap. Assumed to be no outlier.
+            # If group is big enough to end the gap. Assumed to be no outlier and closest point used.
             if len(log_group) > sample_count * 5:
                 section_end = log_group.index[0 if is_forward else -1]
-            # If the sample has passed the gap. Used groups might be outliers.
+            # If the sample has passed the gap. Used groups might be outliers and farthest point used.
             elif sample_range < _CONNECTIVITY_SAMPLE_SIZE.total_seconds() * 1.5:
                 section_end = sample.index[-1 if is_forward else 0]
 
@@ -357,6 +357,11 @@ def _filter_by_connectivity(log_groups: Sequence[pd.Series], median_interval: ti
     return filtered_log_groups
 
 
+_UPPER_VALUE_BORDER = -3
+_LOWER_VALUE_BORDER = -8
+_VALUE_BORDER_SLACK = 0.1
+
+
 def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
     # Calculate flux value acceleration (speed of change)
     forward_velocity = _change_speed(log_flux)
@@ -365,7 +370,7 @@ def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
     backward_acceleration = _change_speed(backward_velocity, -1)
 
     # Merge backwards and forwards directions.
-    # It is computed both ways because the measurements is not evenly distributed,
+    # It is computed both ways because the measurements are not evenly distributed,
     # so outliers immediately after a gap would be missed by the forward pass
     # because the big value jump is damped by a big time gap.
     abs_velocity = _pick_abs_max(backward_velocity, forward_velocity)
@@ -377,12 +382,15 @@ def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
     median_interval = time_delta.median()
 
     # Mark clipped values at the value borders
-    lower_border = min(log_flux.min(), -8)
-    upper_border = max(log_flux.max(), -3)
-    is_near_value_border = cast(pd.Series, (log_flux < lower_border + 0.1) | (upper_border - 0.1 < log_flux))
-    if is_near_value_border.any():
-        is_clipped_value = is_near_value_border & cast(
-            pd.Series, abs_velocity.rolling(median_interval * 10, center=True).median() == 0
+    log_max = log_flux.max()
+    log_min = log_flux.min()
+    is_near_upper_border = 0 if log_max <= _UPPER_VALUE_BORDER - _VALUE_BORDER_SLACK else \
+        log_flux > max(log_max, _UPPER_VALUE_BORDER) - _VALUE_BORDER_SLACK
+    is_near_lower_border = 0 if log_min >= _LOWER_VALUE_BORDER + _VALUE_BORDER_SLACK else \
+        log_flux < min(log_min, _LOWER_VALUE_BORDER) + _VALUE_BORDER_SLACK
+    if not isinstance(is_near_upper_border, int) or not isinstance(is_near_lower_border, int):
+        is_clipped_value = (is_near_upper_border | is_near_lower_border) & cast(
+            pd.Series, abs_velocity.rolling(median_interval * 30, center=True).median() < 1e-6
         )
         clipped_edge = _has_previous_bool_changed(is_clipped_value)
     else:
@@ -404,11 +412,22 @@ def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
     group_id = (clipped_edge | high_acceleration_edge | is_after_gap).cumsum()
     log_groups = log_flux[~(is_clipped_value | has_excessive_acceleration)].groupby(group_id)
 
-    # Filter groups with unnaturally high sustained velocity
-    log_groups = [
-        log_group for _, log_group in log_groups
-        if abs_velocity.loc[log_group.index].mean() < 0.01
-    ]
+    # Filter groups with unnatural velocities
+    filtered_log_groups = deque()
+    for _, log_group in log_groups:
+        group_abs_velocity = abs_velocity.loc[
+            # If possible omit the first velocity, as it isn't part of the group
+            log_group.index[1:] if len(log_group) > 1 else log_group.index
+        ]
+        if (
+                # Extremely high sustained velocity is probably an outlier
+                group_abs_velocity.mean() > 0.01 or
+                # Nearly no velocity is probably at artifact or at the value border
+                group_abs_velocity.median() < 1e-6
+        ):
+            continue
+        filtered_log_groups.append(log_group)
+    log_groups = filtered_log_groups
     if len(log_groups) == 0:
         return None
 
