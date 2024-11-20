@@ -140,9 +140,11 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
     const now = Date.now();
     // Set to max range if not yet loaded. (GOES-1 was launched in 1975)
     if (getRange() === DEFAULT_STATE.range) setRange([0, now]);
-    if (getTimestamp() === DEFAULT_STATE.timestamp) setTimestamp(now);
+    const isViewDefault = getView() === DEFAULT_STATE.view;
+    if (getTimestamp() === DEFAULT_STATE.timestamp)
+      setTimestamp(isViewDefault ? now : (getView()[0] + getView()[1]) / 2);
     // Set to last day by default.
-    if (getView() === DEFAULT_STATE.view) setFollowView(24 * 60 * 60 * 1000, false);
+    if (isViewDefault) setFollowView(24 * 60 * 60 * 1000, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
