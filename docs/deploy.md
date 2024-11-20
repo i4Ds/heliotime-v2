@@ -70,11 +70,14 @@ Heliotime does not have built-in analytics but most reverse proxy logs can be an
 # Unpack all log files (if necessary)
 gzip -d access.log.*.gz
 
-# Remove specific calls (like /api/* calls, optional)
-sed -i '/\/api\//d' access.log*
+# Only show flux api requests to filter out most bots 
+# and get an idea of how much a visitor panned around (optional)
+sed -i '/\/api\/flux/!d' access.log*
+# Only show traffic from the deployed website (optional)
+sed -i '/heliotime.org/!d' access.log*
 
 # Generate report
-goaccess access.log* --output=report.html --log-format=combined --ignore-crawlers --geoip-database="/path/to/GeoLite2-Country.mmdb" 
+goaccess access.log* --output=report.html --log-format=combined --ignore-crawlers --geoip-database="/path/to/GeoLite2-Country.mmdb" --geoip-database="/path/to/GeoLite2-ASN.mmdb" 
 ```
 
 Use web search to find the MaxMind GeoLite2 database or omit the parameter.
