@@ -10,7 +10,6 @@ from data.db import connect_db
 from data.flux.source import FluxSource
 from data.flux.spec import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME
 from ._base import Importer, ImporterProcess
-from ._clean import clean_flux
 
 _LIVE_BASE_URL = 'https://services.swpc.noaa.gov/json/goes/primary/'
 _LIVE_ENERGY = '0.1-0.8nm'
@@ -58,14 +57,13 @@ class LiveImporter(Importer):
         (older than a week) but just import the available part.
         """
         async with self._session.get(_select_live_url(start)) as response:
-            flux = clean_flux(
-                _from_live_json(await response.json()),
-                is_live=True
-            )
+            flux = _from_live_json(await response.json())
             start_index = flux.index.get_indexer([start], method='backfill')[0]
-            # Shift start backwards in case already imported data is now filtered out
+            # Shift start backwards because _import uses already cleaned data for recleaning,
+            # and we don't know if this causes problems if only a single value gets added.
+            # TODO: make _import safe the raw data before cleaning
             start_index = max(0, start_index - 240)
-            await self._import(flux.iloc[start_index:])
+            await self._import(flux[start_index:])
 
             # Calculate time until new data arrives
             cache_header = response.headers.get('cache-control')

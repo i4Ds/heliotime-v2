@@ -478,3 +478,8 @@ def clean_flux(flux: Flux, is_live: bool) -> Flux:
     flux = 10 ** log_flux
     # Remove any potential NANs that got introduced
     return flux.dropna()
+
+
+# Time range at start and end which will not be properly cleaned
+# because there was no bordering data to compare to.
+CLEAN_BORDER_SIZE = timedelta(hours=9)

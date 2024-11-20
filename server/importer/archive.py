@@ -20,7 +20,6 @@ from data.db import connect_db
 from data.flux.source import FluxSource
 from data.flux.spec import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux
 from ._base import Importer, ImporterProcess
-from ._clean import clean_flux
 
 warnings.filterwarnings(
     'ignore',
@@ -203,7 +202,7 @@ class ArchiveImporter(Importer):
                     except:  # noqa
                         self._logger.exception(f'Failed to load {file} into memory. Skipping')
             flux = pd.concat(files_flux).loc[start:]
-            await self._import(clean_flux(flux, is_live=False))
+            await self._import(flux)
             await self._delete_files(files)
         return timedelta(hours=1)
 

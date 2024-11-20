@@ -1,18 +1,21 @@
 import asyncio
 import logging
 import time
+import warnings
 from abc import ABC, abstractmethod
 from datetime import timedelta, datetime
 from multiprocessing import Process
 from typing import Callable, Coroutine, Any
 
+import pandas as pd
 from asyncpg import Connection
 
 from config import IMPORT_START
 from data.flux.source import FluxSource
 from data.flux.spec import Flux
-from data.flux.access import import_flux, fetch_last_flux_timestamp
+from data.flux.access import import_flux, fetch_last_flux_timestamp, fetch_flux
 from utils.logging import configure_logging
+from ._clean import CLEAN_BORDER_SIZE, clean_flux
 
 _logger = logging.getLogger(f'importer')
 
@@ -33,10 +36,42 @@ class Importer(ABC):
         self._connection = connection
 
     async def _import(self, flux: Flux):
+        """
+        Cleans the provided flux and imports it into the database.
+        Takes care of loading and/or recleaning the bordering data.
+        """
         if len(flux) == 0:
             return
         self._logger.info(f'Importing {len(flux)} entries from {flux.index[0]} to {flux.index[-1]}')
-        await import_flux(self._connection, self.source, flux)
+
+        # We need to reclean the bordering data because of how clean_flux works
+        reclean_start = flux.index[0] - CLEAN_BORDER_SIZE
+        reclean_end = flux.index[-1] + CLEAN_BORDER_SIZE
+        flux_start = await fetch_flux(
+            self._connection, self.source, timedelta(),
+            reclean_start - CLEAN_BORDER_SIZE, flux.index[0]
+        )
+        flux_end = await fetch_flux(
+            self._connection, self.source, timedelta(),
+            flux.index[-1], reclean_end + CLEAN_BORDER_SIZE
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore',
+                message='The behavior of array concatenation with empty entries is deprecated. '
+                        'In a future version, this will no longer exclude empty items when determining '
+                        'the result dtype. To retain the old behavior, exclude the empty entries '
+                        'before the concat operation.'
+            )
+            flux_all = pd.concat([flux_start, flux, flux_end])
+
+        # Clean and throw away the bordering data
+        cleaned = clean_flux(
+            flux_all, is_live=self.source == FluxSource.LIVE
+        )[reclean_start:reclean_end]
+
+        # Import the cleaned data
+        await import_flux(self._connection, self.source, cleaned)
 
     @abstractmethod
     async def _import_from(self, start: datetime) -> timedelta:
