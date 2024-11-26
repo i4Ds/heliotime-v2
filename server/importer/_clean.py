@@ -127,7 +127,6 @@ _CONNECTIVITY_SAMPLE_SIZE = timedelta(minutes=1)
 def _check_group_connectivity(
         log_groups: Sequence[pd.Series],
         sample_count: int,
-        section_start_threshold: float,
         is_forward: bool
 ) -> tuple[set[int], deque[tuple[datetime, datetime, float]]]:
     """
@@ -138,7 +137,6 @@ def _check_group_connectivity(
 
     :param log_groups: Groups to check.
     :param sample_count: Number of measurements required for calculating a reference.
-    :param section_start_threshold: Allowed delta threshold for starting an uncertainty section.
     :param is_forward: If connectivity is checked in the forward direction.
     :return: Tuple of:
         - Object IDs of the outlier groups
@@ -194,22 +192,23 @@ def _check_group_connectivity(
             continue
 
         # Maybe start uncertainty section
-        if section_start is None:
-            if section_start_threshold < allowed_delta:
-                # Pick the farthest end of sample as start
-                # as borders of gaps tend to also be outliers.
-                section_start = sample.index[0 if is_forward else -1]
-                # Use existing sample as reference.
-                # Forward will provide the start and backward the end reference.
-                section_reference = sample_median
+        just_opened = False
+        if section_start is None and allowed_delta > 2:
+            # Pick the farthest end of sample as start
+            # as borders of gaps tend to also be outliers.
+            section_start = sample.index[0 if is_forward else -1]
+            # Use existing sample as reference.
+            # Forward will provide the start and backward the end reference.
+            section_reference = sample_median
+            just_opened = True
         # Maybe close uncertainty section
         if section_start is not None:
             section_end = None
-            # If group is big enough to end the gap. Assumed to be no outlier and closest point used.
+            # If group is big enough to end the gap. Assumed to be no outlier so use the closest point.
             if len(log_group) > sample_count * 5:
                 section_end = log_group.index[0 if is_forward else -1]
-            # If the sample has passed the gap. Used groups might be outliers and farthest point used.
-            elif sample_range < _CONNECTIVITY_SAMPLE_SIZE.total_seconds() * 1.5:
+            # If the sample has passed the gap. Used groups might be outliers so use the farthest point.
+            elif not just_opened and sample_range < _CONNECTIVITY_SAMPLE_SIZE.total_seconds() * 1.5:
                 section_end = sample.index[-1 if is_forward else 0]
 
             # If section was closed validly, add it to the result.
@@ -299,14 +298,12 @@ def _filter_by_connectivity(log_groups: Sequence[pd.Series], median_interval: ti
         return log_groups
     # Number of measurements required for calculating a reference.
     sample_count = int(np.ceil(_CONNECTIVITY_SAMPLE_SIZE / median_interval))
-    # Use a higher threshold as longer intervals have more uncertainty.
-    section_start_threshold = 2 if median_interval > timedelta(seconds=55) else 1.5
     # Check connectivity in both directions
     forward_outliers, forward_sections = _check_group_connectivity(
-        log_groups, sample_count, section_start_threshold, True
+        log_groups, sample_count, True
     )
     backward_outliers, backward_sections = _check_group_connectivity(
-        log_groups, sample_count, section_start_threshold, False
+        log_groups, sample_count, False
     )
 
     # Intersect uncertain sections together
@@ -446,17 +443,7 @@ def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
 def clean_flux(flux: Flux, is_live: bool) -> Flux:
     """
     Denoises and removes outliers from the provided measured flux.
-
-    Tuned to work on the archive data. Start dates to test (~4 day range):
-        (
-            '1980-05-28', '1980-06-15', '1980-06-27', '1980-07-13',
-            '1980-09-25', '1980-09-28', '1984-02-06', '1984-09-20',
-            '1985-05-02', '1985-07-01', '1985-08-31', '1985-12-02',
-            '1986-02-26', '1986-04-07', '1986-07-28', '1987-09-03',
-            '1988-03-22', '1991-04-30', '1995-10-04', '1995-10-06',
-            '1996-07-07', '2002-12-19', '2002-12-20', '2009-09-22',
-            '2017-09-06'
-        )
+    Tuned to work on the archive and live data.
 
     :param flux: Raw flux data.
     :param is_live: If the data is from the live source. (meaning 1-minute averaged)
@@ -482,4 +469,6 @@ def clean_flux(flux: Flux, is_live: bool) -> Flux:
 
 # Time range at start and end which will not be properly cleaned
 # because there was no bordering data to compare to.
+# If the date has a lot of holes this could in theory be beyond 9 hours
+# because uncertainty sections might stretch beyond the border.
 CLEAN_BORDER_SIZE = timedelta(hours=9)
