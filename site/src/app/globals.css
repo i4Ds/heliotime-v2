@@ -41,9 +41,12 @@
 
 @layer components {
   .btn {
-    @apply bg-bg-1 hover:bg-bg-2 hover:text-text-focus active:bg-bg-0 active:text-text-dim text-center rounded-sm px-3 py-1.5
+    @apply btn-normal text-center rounded-sm px-3 py-1.5
     focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-focus
     disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-normal {
+    @apply bg-bg-1 hover:bg-bg-2 hover:text-text-focus active:bg-bg-0 active:text-text-dim text-text;
   }
   .btn-primary {
     @apply bg-primary hover:bg-primary-tint hover:text-bg-1 active:bg-primary-shade active:text-bg text-bg;
@@ -51,7 +54,90 @@
   .btn-invert {
     @apply bg-text hover:bg-text-focus hover:text-bg-1 active:bg-text-dim active:text-bg text-bg;
   }
+  .btn-text {
+    @apply bg-transparent hover:bg-bg-2 hover:text-text-focus active:bg-bg-1 active:text-text-dim text-text;
+  }
   .btn-tiny {
     @apply px-2 py-1;
+  }
+
+  /* For @/components/ui/Calendar.tsx */
+  .react-calendar {
+    @apply w-72;
+    /* Custom class from @/components/player/header/JumpButton.tsx */
+    &.entire-view-active > .react-calendar__navigation > .react-calendar__navigation__label {
+      @apply btn-primary;
+    }
+    > .react-calendar__navigation {
+      @apply flex pb-1;
+      > button {
+        @apply btn-tiny btn-text text-nowrap;
+        &.react-calendar__navigation__label {
+          @apply text-text-focus px-0 mx-2;
+        }
+        &:not(.react-calendar__navigation__label) > svg {
+          @apply aspect-square;
+        }
+      }
+    }
+    > .react-calendar__viewContainer {
+      .react-calendar__tile {
+        @apply btn-tiny btn-text !px-0;
+        &.react-calendar__tile--now {
+          @apply btn-normal;
+        }
+        &.react-calendar__tile--hasActive {
+          @apply btn-primary;
+        }
+
+        &.react-calendar__tile--range:not(.react-calendar__tile--rangeStart):not(
+            .react-calendar__tile--rangeEnd
+          ) {
+          @apply btn-normal rounded-none;
+        }
+        &.react-calendar__tile--rangeStart,
+        &.react-calendar__tile--rangeEnd {
+          @apply btn-primary;
+          &:not(.react-calendar__tile--rangeEnd) {
+            @apply rounded-r-none;
+          }
+          &:not(.react-calendar__tile--rangeStart) {
+            @apply rounded-l-none;
+          }
+        }
+
+        &.react-calendar__tile--hover:not(.react-calendar__tile--hoverStart):not(
+            .react-calendar__tile--hoverEnd
+          ) {
+          @apply bg-bg-2 rounded-none;
+        }
+        &.react-calendar__tile--hoverStart,
+        &.react-calendar__tile--hoverEnd {
+          @apply bg-primary-tint text-bg;
+          &:not(.react-calendar__tile--hoverEnd) {
+            @apply rounded-r-none;
+          }
+          &:not(.react-calendar__tile--hoverStart) {
+            @apply rounded-l-none;
+          }
+        }
+      }
+      > .react-calendar__month-view {
+        .react-calendar__month-view__weekdays__weekday {
+          @apply text-center;
+          > abbr {
+            @apply no-underline text-text-dim;
+          }
+        }
+        .react-calendar__month-view__days__day {
+          @apply hxs:aspect-square;
+        }
+        .react-calendar__month-view__days__day--neighboringMonth:not(
+            .react-calendar__tile--hover
+          ):not(.react-calendar__tile--active):not(.react-calendar__tile--hasActive) {
+          @apply text-opacity-80;
+        }
+      }
+    }
   }
 }

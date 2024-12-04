@@ -2,14 +2,17 @@ import { faAngleLeft, faAngleRight, faAnglesRight } from '@fortawesome/free-soli
 import { useWindowEvent } from '@/utils/window';
 import RepoLink from '@/components/links/RepoLink';
 import FhnwLink from '@/components/links/FhnwLink';
+import dynamic from 'next/dynamic';
 import { usePlayerState } from '../state/state';
 import IconButton from './IconButton';
 import { usePlayerSettings } from '../state/settings';
-import ShareButton from './ShareButton';
 import { usePanControl } from '../state/pan';
-import SettingsButton from './SettingsButton';
 import { ViewerButton } from './ViewerButton';
 import { RangeButtons } from './RangeButtons';
+
+const DynamicJumpButton = dynamic(() => import('./JumpButton'), { ssr: false });
+const DynamicSettingsButton = dynamic(() => import('./SettingsButton'), { ssr: false });
+const DynamicShareButton = dynamic(() => import('./ShareButton'), { ssr: false });
 
 const CHART_TITLE = 'Solar Activity Timeline';
 
@@ -56,8 +59,9 @@ export default function ChartHeader() {
             onPointerDown={() => panControl.start(false)}
             title="Pan left"
           />
-          <SettingsButton className="btn-tiny" />
-          <ShareButton
+          <DynamicJumpButton className='btn-tiny' />
+          <DynamicSettingsButton className="btn-tiny" />
+          <DynamicShareButton
             className="btn-tiny"
             data={() => ({ url: globalThis.location.href, title: 'Heliotime' })}
             title="Share view"

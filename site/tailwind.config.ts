@@ -15,8 +15,8 @@ const config: Config = {
       },
       text: {
         focus: 'hsl(0 0% 100%)',
-        DEFAULT: 'hsl(0 0% 92%)',
-        dim: 'hsl(0 0% 84%)',
+        DEFAULT: 'hsl(0 0% 90%)',
+        dim: 'hsl(0 0% 76%)',
       },
       primary: {
         DEFAULT: '#80D4FF',

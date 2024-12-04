@@ -21,7 +21,7 @@ export default function SettingsButton({ className = '' }: SettingsButtonProps) 
     <Suspense fallback={button}>
       <Popover>
         <PopoverTrigger asChild>{button}</PopoverTrigger>
-        <PopoverContent side="bottom" className="w-auto !p-3 space-y-2">
+        <PopoverContent side="top" className="w-auto !p-3 space-y-2">
           <div className="flex items-center space-x-2">
             <Switch
               id="lock-watt-axis"
