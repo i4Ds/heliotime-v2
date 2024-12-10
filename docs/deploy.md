@@ -77,7 +77,7 @@ sed -i '/\/api\/flux/!d' access.log*
 sed -i '/heliotime.org/!d' access.log*
 
 # Generate report
-goaccess access.log* --output=report.html --log-format=combined --ignore-crawlers --geoip-database="/path/to/GeoLite2-Country.mmdb" --geoip-database="/path/to/GeoLite2-ASN.mmdb" 
+goaccess access.log* --output=report.html --log-format=combined --ignore-crawlers --geoip-database="/path/to/GeoLite2-Country.mmdb" --geoip-database="/path/to/GeoLite2-City.mmdb" --geoip-database="/path/to/GeoLite2-ASN.mmdb" 
 ```
 
 Use web search to find the MaxMind GeoLite2 database or omit the parameter.
