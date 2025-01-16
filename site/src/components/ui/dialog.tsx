@@ -28,7 +28,7 @@ function DialogOverlay() {
   return (
     <DialogPrimitive.Overlay
       className={
-        'fixed inset-0 backdrop-brightness-50 z-10' +
+        'fixed inset-0 backdrop-brightness-50 ' +
         'data-[state=open]:animate-in data-[state=closed]:animate-out ' +
         'data-[state=open]:fade-in data-[state=closed]:fade-out'
       }
@@ -48,14 +48,14 @@ const DialogContent = React.forwardRef<
           See: https://github.com/radix-ui/primitives/issues/3324 */}
       <Portal
         ref={setContainer}
-        className="fixed inset-0 flex justify-center -z-10"
+        className="fixed inset-0 flex justify-center pointer-events-none"
       />
       <DialogPrimitive.Portal container={container}>
         <DialogOverlay />
         <DialogPrimitive.Content
           ref={ref}
           className={
-            'z-20 bg-bg overflow-hidden md:rounded-md md:border border-bg-2 md:shadow-md ' +
+            'bg-bg overflow-hidden md:rounded-md md:border border-bg-2 md:shadow-md ' +
             'w-full md:w-auto md:mx-8 md:my-2 md:hxs:my-8 md:hmd:my-16 ' +
             'data-[state=open]:animate-in data-[state=closed]:animate-out ' +
             'data-[state=open]:fade-in data-[state=closed]:fade-out ' +
