@@ -37,6 +37,17 @@
   input {
     @apply bg-bg-0 text-text-focus border border-bg-2 rounded-sm px-3 py-1.5;
   }
+
+  /* Fix ugly scrollbar on desktop chromium browsers */
+  *::-webkit-scrollbar {
+    @apply w-1 h-1;
+  }
+  *::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    @apply bg-text-dim rounded-full;
+  }
 }
 
 @layer components {
