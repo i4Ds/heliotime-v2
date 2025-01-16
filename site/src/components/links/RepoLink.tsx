@@ -15,7 +15,7 @@ export default React.memo(function RepoLink({ className = '' }: RepoLinkProps) {
       rel="noopener"
       title="View source code on GitHub"
       aria-label="View source code on GitHub"
-      className={className}
+      className={`text-text-focus ${className}`}
     >
       <FontAwesomeIcon icon={faGithub} />
     </a>

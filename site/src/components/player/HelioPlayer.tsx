@@ -11,6 +11,8 @@ import { HelioPlayerSettingsProvider, usePlayerSettings } from './state/settings
 import { HelioPlayerPanProvider } from './state/pan';
 import RepoLink from '../links/RepoLink';
 import FhnwLink from '../links/FhnwLink';
+import AboutLink from '../links/AboutLink';
+import AboutInsert from './modal/AboutInsert';
 
 function MaybeHelioView() {
   const [settings] = usePlayerSettings();
@@ -21,6 +23,7 @@ function MaybeHelioView() {
       <div className="absolute right-4 top-4 hidden sm:hmd:flex flex-row items-center text-3xl space-x-3">
         <FhnwLink />
         <RepoLink />
+        <AboutLink />
       </div>
     </>
   );
@@ -39,6 +42,7 @@ export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
     <HelioPlayerSettingsProvider>
       <HelioPlayerStateProvider chartWidth={width}>
         <HelioPlayerPanProvider>
+          <AboutInsert />
           <div className={`flex flex-col content-center gap-3 overflow-y-hidden ${className}`}>
             <MaybeHelioView />
             <ChartHeader />

@@ -129,10 +129,8 @@ export function MainChart(props: PositionSizeProps) {
     };
   }, [hoverPoint, series, timeScale, wattScale]);
 
-  useWindowEvent(
-    'wheel',
-    (event) => {
-      event.preventDefault();
+  const handleWheel = useCallback(
+    (event: React.WheelEvent) => {
       const point = localPoint(event);
       if (point === null) return;
       const zoomed = wheelZoomView(
@@ -145,7 +143,7 @@ export function MainChart(props: PositionSizeProps) {
       const panDelta = timeScale.invert(event.deltaX).getTime() - view[0];
       state.setView(panView(zoomed, panDelta));
     },
-    { passive: false }
+    [state, timeScale, view]
   );
 
   // Handle drag & click interactions
@@ -242,6 +240,7 @@ export function MainChart(props: PositionSizeProps) {
       height={height}
       x={left}
       y={top}
+      onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerOver={handleHover}
       onPointerMove={handleHover}

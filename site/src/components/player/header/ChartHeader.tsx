@@ -3,6 +3,7 @@ import { useWindowEvent } from '@/utils/window';
 import RepoLink from '@/components/links/RepoLink';
 import FhnwLink from '@/components/links/FhnwLink';
 import dynamic from 'next/dynamic';
+import AboutLink from '@/components/links/AboutLink';
 import { usePlayerState } from '../state/state';
 import IconButton from './IconButton';
 import { usePlayerSettings } from '../state/settings';
@@ -30,8 +31,9 @@ export default function ChartHeader() {
       <div className="flex overflow-x-auto gap-2">
         <div className="flex-grow basis-0 flex items-center gap-2">
           <RangeButtons />
-          <RepoLink className={`${settings.showPreview ? 'sm:hmd:hidden' : undefined} px-0.5`} />
-          <FhnwLink className={`${settings.showPreview ? 'sm:hmd:hidden' : undefined} px-0.5`} />
+          <RepoLink className={`text-2xl ${settings.showPreview ? 'sm:hmd:hidden' : undefined}`} />
+          <FhnwLink className={`text-2xl ${settings.showPreview ? 'sm:hmd:hidden' : undefined}`} />
+          <AboutLink className={`text-2xl ${settings.showPreview ? 'sm:hmd:hidden' : undefined}`} />
         </div>
         <h1 className="hidden sm:block overflow-x-auto text-nowrap select-text">{CHART_TITLE}</h1>
         <div className="flex-grow basis-0 flex items-center flex-row-reverse gap-2">
@@ -59,7 +61,7 @@ export default function ChartHeader() {
             onPointerDown={() => panControl.start(false)}
             title="Pan left"
           />
-          <DynamicJumpButton className='btn-tiny' />
+          <DynamicJumpButton className="btn-tiny" />
           <DynamicSettingsButton className="btn-tiny" />
           <DynamicShareButton
             className="btn-tiny"
