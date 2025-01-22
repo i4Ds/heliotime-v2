@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import { expCeil } from '@/utils/math';
 import { faArrowsLeftRight } from '@fortawesome/free-solid-svg-icons';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -23,14 +23,14 @@ const RANGES: Range[] = [
 function useRanges(): Range[] {
   const { range } = usePlayerRenderState();
   const rangeSize = expCeil(range[1] - range[0], 1.1);
-  return RANGES.filter(({ sizeMs }) => rangeSize > sizeMs);
+  return useMemo(() => RANGES.filter(({ sizeMs }) => rangeSize > sizeMs), [rangeSize]);
 }
 
 interface InternalProps {
   ranges: Range[];
 }
 
-export function InternalRangeDropdown({ className, ranges }: RangeDropdownProps & InternalProps) {
+function InternalRangeDropdown({ className, ranges }: RangeDropdownProps & InternalProps) {
   const state = usePlayerState();
   const button = (
     <IconButton icon={faArrowsLeftRight} title="View range" square className={className} />
