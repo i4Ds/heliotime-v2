@@ -1,7 +1,5 @@
 import { faAngleLeft, faAngleRight, faAnglesRight } from '@fortawesome/free-solid-svg-icons';
 import { useWindowEvent } from '@/utils/window';
-import RepoLink from '@/components/links/RepoLink';
-import FhnwLink from '@/components/links/FhnwLink';
 import dynamic from 'next/dynamic';
 import AboutLink from '@/components/links/AboutLink';
 import { usePlayerState } from '../state/state';
@@ -9,7 +7,7 @@ import IconButton from './IconButton';
 import { usePlayerSettings } from '../state/settings';
 import { usePanControl } from '../state/pan';
 import { ViewerButton } from './ViewerButton';
-import { RangeButtons } from './RangeButtons';
+import { RangeButtons, RangeDropdown } from './range';
 
 const DynamicJumpButton = dynamic(() => import('./JumpButton'), { ssr: false });
 const DynamicSettingsButton = dynamic(() => import('./SettingsButton'), { ssr: false });
@@ -27,14 +25,40 @@ export default function ChartHeader() {
 
   return (
     <>
-      <h1 className="sm:hidden text-center">{CHART_TITLE}</h1>
+      <h1 className="block sm:hidden text-center">{CHART_TITLE}</h1>
       <div className="flex overflow-x-auto gap-2">
-        <div className="flex-grow basis-0 flex items-center gap-2">
-          <RangeButtons />
+        <div className="hidden lg:flex hmd:hidden hmd:md:flex flex-grow basis-0 items-center gap-2">
+          <RangeButtons buttonsClassName="btn-tiny" />
+        </div>
+        <div className="hidden sm:flex overflow-x-auto gap-2">
+          <h1 className="text-nowrap select-text">{CHART_TITLE}</h1>
           <AboutLink className={`text-2xl ${settings.showPreview ? 'sm:hmd:hidden' : undefined}`} />
         </div>
-        <h1 className="hidden sm:block overflow-x-auto text-nowrap select-text">{CHART_TITLE}</h1>
-        <div className="flex-grow basis-0 flex items-center flex-row-reverse gap-2">
+        <div className="flex-grow basis-0 flex items-center justify-center sm:justify-end gap-2">
+          <ViewerButton className={`${settings.showPreview ? 'hmd:hidden' : ''} btn-tiny`} />
+          <AboutLink
+            className="text-2xl block sm:hidden"
+          />
+          <DynamicShareButton
+            className="btn-tiny"
+            data={() => ({ url: globalThis.location.href, title: 'Heliotime' })}
+            title="Share view"
+          />
+          <DynamicSettingsButton className="btn-tiny" />
+          <RangeDropdown className="lg:hidden hmd:md:hidden btn-tiny" />
+          <DynamicJumpButton className="btn-tiny" />
+          <IconButton
+            icon={faAngleLeft}
+            className="hidden md:block xs:hmd:block btn-tiny"
+            onPointerDown={() => panControl.start(false)}
+            title="Pan left"
+          />
+          <IconButton
+            icon={faAngleRight}
+            className="hidden md:block xs:hmd:block btn-tiny"
+            onPointerDown={() => panControl.start(true)}
+            title="Pan right"
+          />
           <IconButton
             icon={faAnglesRight}
             className={`btn-tiny ${settings.isFollowing ? 'btn-invert' : ''}`}
@@ -47,26 +71,6 @@ export default function ChartHeader() {
             }}
             title="Follow live"
           />
-          <IconButton
-            icon={faAngleRight}
-            className="hidden md:block btn-tiny"
-            onPointerDown={() => panControl.start(true)}
-            title="Pan right"
-          />
-          <IconButton
-            icon={faAngleLeft}
-            className="hidden md:block btn-tiny"
-            onPointerDown={() => panControl.start(false)}
-            title="Pan left"
-          />
-          <DynamicJumpButton className="btn-tiny" />
-          <DynamicSettingsButton className="btn-tiny" />
-          <DynamicShareButton
-            className="btn-tiny"
-            data={() => ({ url: globalThis.location.href, title: 'Heliotime' })}
-            title="Share view"
-          />
-          <ViewerButton className={`${settings.showPreview ? 'hmd:hidden' : ''} btn-tiny`} />
         </div>
       </div>
     </>
