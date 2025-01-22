@@ -46,10 +46,11 @@ const DialogContent = React.forwardRef<
     <>
       {/* Workaround for broken exit animations when wrapping the dialog content.
           See: https://github.com/radix-ui/primitives/issues/3324 */}
-      <Portal
-        ref={setContainer}
-        className="fixed inset-0 flex justify-center pointer-events-none"
-      />
+      <Portal>
+        {/* Must have a wrapping, not-fixed div to prevent a Next.js warning.
+            See: https://github.com/shadcn-ui/ui/issues/1355#issuecomment-1909192594 */}
+        <div ref={setContainer} className="fixed inset-0 flex justify-center pointer-events-none" />
+      </Portal>
       <DialogPrimitive.Portal container={container}>
         <DialogOverlay />
         <DialogPrimitive.Content
