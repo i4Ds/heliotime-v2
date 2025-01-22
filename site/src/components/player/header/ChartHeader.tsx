@@ -31,8 +31,6 @@ export default function ChartHeader() {
       <div className="flex overflow-x-auto gap-2">
         <div className="flex-grow basis-0 flex items-center gap-2">
           <RangeButtons />
-          <RepoLink className={`text-2xl ${settings.showPreview ? 'sm:hmd:hidden' : undefined}`} />
-          <FhnwLink className={`text-2xl ${settings.showPreview ? 'sm:hmd:hidden' : undefined}`} />
           <AboutLink className={`text-2xl ${settings.showPreview ? 'sm:hmd:hidden' : undefined}`} />
         </div>
         <h1 className="hidden sm:block overflow-x-auto text-nowrap select-text">{CHART_TITLE}</h1>
