@@ -26,6 +26,7 @@ RUN --mount=type=cache,target=/usr/local/share/.cache yarn install --frozen-lock
 
 # Build server
 COPY src ./src
+COPY mdx-components.tsx .
 COPY next.config.mjs .
 COPY postcss.config.mjs .
 COPY tailwind.config.ts .
