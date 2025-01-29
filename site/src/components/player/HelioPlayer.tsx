@@ -3,6 +3,7 @@
 import { useParentSize } from '@visx/responsive';
 import HelioView from '@/components/player/view/HelioView';
 import { THEME } from '@/app/theme';
+import dynamic from 'next/dynamic';
 import { HelioPlayerStateProvider } from './state/state';
 import ChartHeader from './header/ChartHeader';
 import { MainChart } from './chart/MainChart';
@@ -13,6 +14,8 @@ import RepoLink from '../links/RepoLink';
 import FhnwLink from '../links/FhnwLink';
 import AboutLink from '../links/AboutLink';
 import AboutInsert from './about/AboutInsert';
+
+const ToasterWithWelcome = dynamic(() => import('./toast/ToasterWithWelcome'), { ssr: false });
 
 function MaybeHelioView() {
   const [settings] = usePlayerSettings();
@@ -64,6 +67,7 @@ export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
               )}
             </div>
           </div>
+          <ToasterWithWelcome />
         </HelioPlayerPanProvider>
       </HelioPlayerStateProvider>
     </HelioPlayerSettingsProvider>
