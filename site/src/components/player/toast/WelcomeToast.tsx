@@ -5,13 +5,25 @@ import { toast } from 'sonner';
 
 const VISITED_KEY = 'visited';
 
-function WelcomeMessage(id: number | string = '') {
+/**
+ * Workaround to access the toast ID inside the toast itself.
+ * {@link toast.custom} does the same but removes the close button.
+ */
+interface Ref {
+  id?: number | string;
+}
+
+function WelcomeMessage(ref: Ref) {
   return (
     <div className="prose prose-sm">
       Welcome to Heliotime! A solar activity browser.
       <br />
       Check out the{' '}
-      <Link href="#about" onClick={() => toast.dismiss(id)}>
+      <Link
+        href="#about"
+        // eslint-disable-next-line react/destructuring-assignment
+        onClick={() => toast.dismiss(ref.id!)}
+      >
         about page
       </Link>{' '}
       for details.
@@ -25,7 +37,8 @@ function WelcomeToast() {
     localStorage.setItem(VISITED_KEY, 'true');
     // Required to work on page load
     setTimeout(() => {
-      toast(WelcomeMessage, {
+      const ref: Ref = {};
+      ref.id = toast(WelcomeMessage(ref), {
         duration: Number.POSITIVE_INFINITY,
       });
     });
