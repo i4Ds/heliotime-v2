@@ -12,7 +12,7 @@ import { HelioPlayerPanProvider } from './state/pan';
 import RepoLink from '../links/RepoLink';
 import FhnwLink from '../links/FhnwLink';
 import AboutLink from '../links/AboutLink';
-import AboutInsert from './modal/AboutInsert';
+import AboutInsert from './about/AboutInsert';
 
 function MaybeHelioView() {
   const [settings] = usePlayerSettings();
