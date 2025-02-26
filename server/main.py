@@ -10,10 +10,14 @@ from pydantic import BaseModel
 from config import FLUX_QUERY_TIMEOUT, FLUX_MAX_RESOLUTION, ONLY_API
 from data.db import create_db_pool, apply_db_migrations
 from data.flux.fetcher import FluxFetcher
-from data.flux.spec import empty_flux
+from data.flux.spec.channel import FluxChannel, SATELLITE_COMBINED_ID, FrequencyBand
+from data.flux.spec.data import empty_flux
 from importer.archive import ArchiveImporterProcess
 from importer.live import LiveImporterProcess
 from utils.logging import configure_logging
+
+# Used while the API doesn't support channel selection
+_DEFAULT_CHANNEL = FluxChannel(SATELLITE_COMBINED_ID, FrequencyBand.LONG, True)
 
 db_pool: asyncpg.Pool
 flux_fetcher: FluxFetcher
@@ -34,7 +38,7 @@ async def lifespan(_app: FastAPI):
         live_importer.start()
 
     db_pool = await create_db_pool()
-    flux_fetcher = FluxFetcher(db_pool)
+    flux_fetcher = FluxFetcher(db_pool, _DEFAULT_CHANNEL)
 
     yield
 

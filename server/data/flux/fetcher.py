@@ -1,15 +1,17 @@
 import asyncio
 import itertools
+from asyncio import Future
 from collections import deque
 from datetime import datetime, timedelta
-from typing import Optional, cast, Awaitable
+from typing import Optional, cast
 
 import asyncpg
 import pandas as pd
 
 from data.flux.access import fetch_flux_timestamp_range, fetch_flux, fetch_raw_flux
-from data.flux.source import FluxSource
-from data.flux.spec import Flux, empty_flux, RawFlux
+from data.flux.spec.channel import FluxChannel
+from data.flux.spec.data import Flux, empty_flux, RawFlux
+from data.flux.spec.source import FluxSource
 
 
 class FluxFetcher:
@@ -22,12 +24,17 @@ class FluxFetcher:
     _pool: asyncpg.Pool
     _update_task: asyncio.Task
 
+    channel: FluxChannel
     _ranges: dict[FluxSource, tuple[datetime, datetime]]
     start: Optional[datetime]
     end: Optional[datetime]
 
-    def __init__(self, pool: asyncpg.Pool, update_interval=timedelta(seconds=10)):
+    def __init__(
+            self, pool: asyncpg.Pool, channel: FluxChannel, *,
+            update_interval=timedelta(seconds=10)
+    ):
         self._pool = pool
+        self.channel = channel
         self._ranges = {}
         self.start = None
         self.end = None
@@ -46,7 +53,7 @@ class FluxFetcher:
             ranges = {}
             start = end = None
             for source in self._SOURCES:
-                timestamp_range = await fetch_flux_timestamp_range(connection, source)
+                timestamp_range = await fetch_flux_timestamp_range(connection, source, self.channel)
                 if timestamp_range is None:
                     continue
                 ranges[source] = timestamp_range
@@ -63,7 +70,7 @@ class FluxFetcher:
             fetch_function: type[fetch_flux] | type[fetch_raw_flux],
             start: datetime, end: datetime,
             interval: timedelta, timeout: Optional[timedelta] = None
-    ) -> Awaitable[tuple]:
+    ) -> Future[list]:
         section_start = start
         sections = deque()
         for source in self._SOURCES:
@@ -74,7 +81,7 @@ class FluxFetcher:
                 break
             section_end = min(source_range[1], end)
             sections.append(fetch_function(
-                self._pool, source, interval,
+                self._pool, source, self.channel, interval,
                 section_start, section_end, timeout
             ))
             if end <= source_range[1]:

@@ -1,9 +1,6 @@
 from datetime import timedelta
 from enum import Enum
 
-# Amount of time subtracted form the auto refresh horizon to account for timing inaccuracies
-AUTO_REFRESH_SLACK = timedelta(minutes=2)
-
 
 class _Resolution(Enum):
     # Add R_ prefix because identifiers cannot start with a number
@@ -23,49 +20,46 @@ class _Resolution(Enum):
 
 
 class FluxSource(Enum):
+    """
+    Source from which data was retrieved form:
+    - Archive has the highest resolution but lags by a few days.
+    - Live has a lower resolution but is up to date.
+    """
     ARCHIVE = (
         'flux_archive',
         timedelta(seconds=1),
-        {res: timedelta() for res in (
-            _Resolution.R_10S,
-            _Resolution.R_1M,
-            _Resolution.R_10M,
-            _Resolution.R_1H,
-            _Resolution.R_12H,
-            _Resolution.R_5D,
-        )}
+        (_Resolution.R_10S,
+         _Resolution.R_1M,
+         _Resolution.R_10M,
+         _Resolution.R_1H,
+         _Resolution.R_12H,
+         _Resolution.R_5D)
     )
     LIVE = (
         'flux_live',
         timedelta(minutes=1),
-        {
-            _Resolution.R_10M: timedelta(days=8),
-            _Resolution.R_1H: timedelta(days=8),
-            _Resolution.R_12H: timedelta(days=8),
-            _Resolution.R_5D: timedelta(days=15),
-        }
+        (_Resolution.R_10M,
+         _Resolution.R_1H,
+         _Resolution.R_12H,
+         _Resolution.R_5D)
     )
 
     table_name: str
     raw_resolution: timedelta
-    auto_refresh_horizons: dict[_Resolution, timedelta]
+    resolutions: tuple[_Resolution, ...]
 
     def __init__(
             self,
             table_name: str,
             raw_resolution: timedelta,
-            auto_refresh_horizons: dict[_Resolution, timedelta]
+            resolutions: tuple[_Resolution, ...],
     ):
-        """
-        :param auto_refresh_horizons: How far back the resolutions get auto-refreshed.
-             Must be ordered form smallest to biggest resolution.
-        """
         self.table_name = table_name
         self.raw_resolution = raw_resolution
-        self.auto_refresh_horizons = auto_refresh_horizons
+        self.resolutions = resolutions
 
     def select_relation(self, interval: timedelta) -> str:
-        for resolution in reversed(self.auto_refresh_horizons):
+        for resolution in reversed(self.resolutions):
             if interval >= resolution.size:
                 return self.table_name + resolution.suffix
         return self.table_name

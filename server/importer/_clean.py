@@ -9,7 +9,7 @@ from typing import cast, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from data.flux.spec import empty_flux, Flux
+from data.flux.spec.data import empty_flux, Flux
 
 
 def _change_speed(series: pd.Series, periods=1) -> pd.Series:
@@ -445,6 +445,8 @@ def clean_flux(flux: Flux, is_live: bool) -> Flux:
     Denoises and removes outliers from the provided measured flux.
     Tuned to work on the archive and live data.
 
+    TODO: Consider frequency band (and calibrate for the short band).
+
     :param flux: Raw flux data.
     :param is_live: If the data is from the live source. (meaning 1-minute averaged)
     """
@@ -471,4 +473,5 @@ def clean_flux(flux: Flux, is_live: bool) -> Flux:
 # because there was no bordering data to compare to.
 # If the date has a lot of holes this could in theory be beyond 9 hours
 # because uncertainty sections might stretch beyond the border.
+# TODO: Make border size formally correct, so we can better guarantee clean borders.
 CLEAN_BORDER_SIZE = timedelta(hours=9)

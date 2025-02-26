@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import logging
 import time
 import warnings
@@ -11,9 +12,10 @@ import pandas as pd
 from asyncpg import Connection
 
 from config import IMPORT_START
-from data.flux.source import FluxSource
-from data.flux.spec import Flux
 from data.flux.access import import_flux, fetch_last_flux_timestamp, fetch_flux
+from data.flux.spec.channel import FluxChannel
+from data.flux.spec.data import Flux, empty_flux
+from data.flux.spec.source import FluxSource
 from utils.logging import configure_logging
 from ._clean import CLEAN_BORDER_SIZE, clean_flux
 
@@ -35,24 +37,25 @@ class Importer(ABC):
         self._logger = _source_logger(source)
         self._connection = connection
 
-    async def _import(self, flux: Flux):
+    async def _clean(self, channel: FluxChannel, flux: Flux) -> Flux:
         """
-        Cleans the provided flux and imports it into the database.
+        Cleans the provided flux.
         Takes care of loading and/or recleaning the bordering data.
         """
+        if channel.is_clean:
+            raise ValueError('Cannot clean already cleaned flux.')
         if len(flux) == 0:
-            return
-        self._logger.info(f'Importing {len(flux)} entries from {flux.index[0]} to {flux.index[-1]}')
+            return empty_flux()
 
         # We need to reclean the bordering data because of how clean_flux works
         reclean_start = flux.index[0] - CLEAN_BORDER_SIZE
         reclean_end = flux.index[-1] + CLEAN_BORDER_SIZE
         flux_start = await fetch_flux(
-            self._connection, self.source, timedelta(),
+            self._connection, self.source, channel, timedelta(),
             reclean_start - CLEAN_BORDER_SIZE, flux.index[0]
         )
         flux_end = await fetch_flux(
-            self._connection, self.source, timedelta(),
+            self._connection, self.source, channel, timedelta(),
             flux.index[-1], reclean_end + CLEAN_BORDER_SIZE
         )
         with warnings.catch_warnings():
@@ -66,12 +69,48 @@ class Importer(ABC):
             flux_all = pd.concat([flux_start, flux, flux_end])
 
         # Clean and throw away the bordering data
-        cleaned = clean_flux(
+        return clean_flux(
             flux_all, is_live=self.source == FluxSource.LIVE
         )[reclean_start:reclean_end]
 
-        # Import the cleaned data
-        await import_flux(self._connection, self.source, cleaned)
+    async def _import(self, channels: dict[FluxChannel, Flux]):
+        """
+        Imports the provided flux and if not present, creates the cleaned version.
+
+        TODO: implement updating the combined channels
+        """
+        if len(channels) == 0:
+            return
+
+        # Create cleaned versions if they do not exist
+        existing_channels = list(channels.items())  # Cannot modify dict while iterating
+        for channel, flux in existing_channels:
+            cleaned_channel = dataclasses.replace(channel, is_clean=True)
+            if cleaned_channel in channels:
+                continue  # Skip if cleaned version already exists
+            channels[cleaned_channel] = await self._clean(channel, flux)
+
+        # Clean empty channels
+        # TODO: define the provided time range, so we can also overwrite with "nothing"
+        #   aka deleting the existing erroneous entries.
+        channels = {
+            channel: flux
+            for channel, flux in channels.items()
+            if len(flux) > 0
+        }
+        if len(channels) == 0:
+            return
+
+        # Log final import information
+        entry_count = sum(len(flux) for flux in channels.values())
+        start = min(flux.index[0] for flux in channels.values())
+        end = max(flux.index[-1] for flux in channels.values())
+        self._logger.info(
+            f'Importing {len(channels)} channels with {entry_count} entries from {start} to {end}'
+        )
+
+        # Import the cleaned versions
+        await import_flux(self._connection, self.source, channels)
 
     @abstractmethod
     async def _import_from(self, start: datetime) -> timedelta:
@@ -91,8 +130,13 @@ class Importer(ABC):
             start = IMPORT_START if last_timestamp is None else \
                 last_timestamp + timedelta(milliseconds=1)
             self._logger.info(f'Start import from {start}')
+            start_time = time.perf_counter()
             wait_delta = await self._import_from(start)
-            self._logger.info(f'Finished import. Next import in {wait_delta}')
+            elapsed_seconds = time.perf_counter() - start_time
+            self._logger.info(
+                f'Finished import in {timedelta(seconds=elapsed_seconds)}. '
+                f'Next import in {wait_delta}'
+            )
             await asyncio.sleep(wait_delta.total_seconds())
 
 

@@ -58,7 +58,7 @@ def upgrade() -> None:
     op.execute(_change_real_time('flux_live_12h', False))
     op.execute(_change_real_time('flux_live_5d', False))
 
-    # Optimize that each chunk is as large as the largest allowed fetch
+    # Optimize that chunk size to fill 25% of memory
     op.execute(_change_chunk_size('flux_archive', timedelta(seconds=1)))
     op.execute(_change_chunk_size('flux_archive_10s', timedelta(seconds=10)))
     op.execute(_change_chunk_size('flux_archive_1m', timedelta(minutes=1)))

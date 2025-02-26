@@ -1,17 +1,19 @@
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 from typing import Optional, Awaitable, Callable, cast
 
 import pandas as pd
 from asyncpg import Connection, Pool
 
-from data.flux.source import AUTO_REFRESH_SLACK, FluxSource
-from data.flux.spec import empty_flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, RawFlux
+from data.flux.spec.channel import FluxChannel
+from data.flux.spec.data import empty_flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, RawFlux
+from data.flux.spec.source import FluxSource
 
 
 def _select_flux(
         connection: Connection | Pool,
         time_component: Callable[[str], str],
         source: FluxSource,
+        channel: FluxChannel,
         interval: timedelta,
         start: datetime,
         end: datetime,
@@ -23,25 +25,28 @@ def _select_flux(
             f'''
                 SELECT {time_component('time')} AS time, flux
                 FROM {source.table_name}
-                WHERE $1 <= time AND time < $2
+                WHERE satellite = $1 AND band = $2 AND is_clean = $3 AND $4 <= time AND time < $5
                 ORDER BY time
             ''',
-            start, end,
+            channel.satellite, channel.band, channel.is_clean, start, end,
             timeout=timeout_seconds
         )
+    relation = source.select_relation(interval)
+    # Temporary workaround until aggregated flux is fully implemented
+    max_column = 'MAX(flux)' if relation == source.table_name else 'MAX(flux_max)'
     return connection.fetch(
         f'''
                 WITH downscale AS(
-                    SELECT time_bucket($1, time) AS bucket, MAX(flux) AS flux
-                    FROM {source.select_relation(interval)}
-                    WHERE $2 <= time AND time < $3
+                    SELECT time_bucket($1, time) AS bucket, ${max_column} AS flux
+                    FROM {relation}
+                    WHERE satellite = $2 AND band = $3 AND is_clean = $4 AND $5 <= time AND time < $6
                     GROUP BY bucket
                 ) 
                 SELECT {time_component('bucket')} AS time, flux
                 FROM downscale
                 ORDER BY bucket
             ''',
-        interval, start, end,
+        interval, channel.satellite, channel.band, channel.is_clean, start, end,
         timeout=timeout_seconds
     )
 
@@ -49,6 +54,7 @@ def _select_flux(
 async def fetch_flux(
         connection: Connection | Pool,
         source: FluxSource,
+        channel: FluxChannel,
         interval: timedelta,
         start: datetime,
         end: datetime,
@@ -57,7 +63,7 @@ async def fetch_flux(
     records = await _select_flux(
         connection,
         lambda column: column,
-        source, interval, start, end, timeout
+        source, channel, interval, start, end, timeout
     )
     return empty_flux() if len(records) == 0 else pd.DataFrame(
         records,
@@ -68,6 +74,7 @@ async def fetch_flux(
 async def fetch_raw_flux(
         connection: Connection | Pool,
         source: FluxSource,
+        channel: FluxChannel,
         interval: timedelta,
         start: datetime,
         end: datetime,
@@ -76,33 +83,52 @@ async def fetch_raw_flux(
     records = await _select_flux(
         connection,
         lambda column: f'(EXTRACT(EPOCH FROM {column}) * 1000)::BIGINT',
-        source, interval, start, end, timeout
+        source, channel, interval, start, end, timeout
     )
     return cast(RawFlux, map(tuple, records))
 
 
-async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
-    if len(flux) == 0:
+async def import_flux(connection: Connection, source: FluxSource, channels: dict[FluxChannel, Flux]):
+    """
+    Inserts or replaces all measurements in the time range of each provided channel
+    and refreshes the aggregates for all channels in the combined time range.
+
+    Multiple channels can be imported at once and should ideally overlap in time
+    to avoid refreshing the aggregates multiple times.
+    """
+    # Clean empty channels
+    channels = {
+        channel: flux
+        for channel, flux in channels.items()
+        if len(flux) > 0
+    }
+    if len(channels) == 0:
         return
+
     async with connection.transaction():
-        # Delete old entries if they exist
-        await connection.execute(
-            f"DELETE FROM {source.table_name} WHERE $1 <= time AND time <= $2",
-            flux.index[0], flux.index[-1]
-        )
-        # Insert new entries
-        await connection.copy_records_to_table(
-            source.table_name, records=flux.items()
-        )
+        for channel, flux in channels.items():
+            # Delete old entries if they exist
+            await connection.execute(
+                f'''
+                    DELETE FROM {source.table_name}
+                    WHERE satellite = $1 AND band = $2 AND is_clean = $3
+                      AND $4 <= time AND time <= $5;
+                ''',
+                channel.satellite, channel.band, channel.is_clean, flux.index[0], flux.index[-1]
+            )
+            # Insert new entries
+            await connection.copy_records_to_table(
+                source.table_name,
+                records=(
+                    (time, value, channel.satellite, channel.band, channel.is_clean)
+                    for time, value in flux.items()
+                )
+            )
 
     # refresh_continuous_aggregate() cannot be run within transaction
-    now = datetime.now(timezone.utc)
-    start = flux.index[0]
-    end = flux.index[-1]
-    for resolution, auto_refresh_horizon in source.auto_refresh_horizons.items():
-        if now - auto_refresh_horizon + AUTO_REFRESH_SLACK < start:
-            # Skip manual refresh because it will be soon automatically refreshed
-            continue
+    start = min(flux.index[0] for flux in channels.values())
+    end = max(flux.index[-1] for flux in channels.values())
+    for resolution in source.resolutions:
         await connection.execute(
             f"""
                 CALL refresh_continuous_aggregate(
@@ -115,21 +141,19 @@ async def import_flux(connection: Connection, source: FluxSource, flux: Flux):
         )
 
 
-async def fetch_flux_timestamp_range(connection: Connection, source: FluxSource) -> tuple[datetime, datetime] | None:
+async def fetch_flux_timestamp_range(
+        connection: Connection, source: FluxSource, channel: FluxChannel
+) -> tuple[datetime, datetime] | None:
     """
     Can be extremely slow if there are a lot of chunks.
     See: https://github.com/timescale/timescaledb/issues/5102
     """
-    start, end = await connection.fetchrow(f'SELECT MIN(time), MAX(time) FROM {source.table_name}')
+    start, end = await connection.fetchrow(
+        f'SELECT MIN(time), MAX(time) FROM {source.table_name} '
+        f'WHERE satellite = $1 AND band = $2 AND is_clean = $3',
+        channel.satellite, channel.band, channel.is_clean
+    )
     return None if start is None else (start, end)
-
-
-async def fetch_first_flux_timestamp(connection: Connection, source: FluxSource) -> Optional[datetime]:
-    """
-    Can be extremely slow if there are a lot of chunks.
-    See: https://github.com/timescale/timescaledb/issues/5102
-    """
-    return await connection.fetchval(f'SELECT MIN(time) FROM {source.table_name}')
 
 
 async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource) -> Optional[datetime]:
