@@ -5,7 +5,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta, datetime, timezone, time
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Union
+from typing import Callable, TypeVar, Any, Union, Iterable
 
 import pandas as pd
 from asyncpg import Connection
@@ -17,8 +17,9 @@ from sunpy.net.fido_factory import UnifiedResponse
 from sunpy.timeseries import TimeSeries
 
 from data.db import connect_db
-from data.flux.source import FluxSource
-from data.flux.spec import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux
+from data.flux.spec.channel import FluxChannel, FrequencyBand
+from data.flux.spec.data import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux
+from data.flux.spec.source import FluxSource
 from ._base import Importer, ImporterProcess
 
 warnings.filterwarnings(
@@ -28,30 +29,18 @@ warnings.filterwarnings(
 )
 
 
-def _select_best_source_day(day_result: QueryResponse) -> QueryResponseRow:
-    # Assert that all intervals always go an entire day
-    assert day_result[0]['Start Time'].to_datetime().time() == time(0, 0, 0, 0)
-    end_times = set(day_result['End Time'])
+def _select_best_source(results: QueryResponse) -> QueryResponseRow:
+    # Assert that all intervals always go an entire day (start is the same for all)
+    assert results[0]['Start Time'].to_datetime().time() == time(0, 0, 0, 0)
+    end_times = set(results['End Time'])
     assert len(end_times) == 1
     assert end_times.pop().to_datetime().time() == time(23, 59, 59, 999000)
 
-    # Select newest satellite
-    day_result.sort('SatelliteNumber', reverse=True)
-    max_sat_number = day_result[0]['SatelliteNumber']
-    day_result = day_result[day_result['SatelliteNumber'] == max_sat_number]
-    if 'Resolution' not in day_result.keys():
-        return day_result[0]
-
+    if 'Resolution' not in results.keys():
+        return results[0]
     # Select highest resolution
-    high_res = day_result[day_result['Resolution'] == 'flx1s']
-    return high_res[0] if len(high_res) >= 1 else day_result[0]
-
-
-def _select_best_source(results: UnifiedResponse) -> UnifiedResponse:
-    return UnifiedResponse() if len(results[0]) == 0 else UnifiedResponse(*(
-        _select_best_source_day(days_result)
-        for days_result in results[0].group_by('Start Time').groups
-    ))
+    high_res = results[results['Resolution'] == 'flx1s']
+    return high_res[0] if len(high_res) >= 1 else results[0]
 
 
 def _month_start(date: datetime) -> datetime:
@@ -62,18 +51,19 @@ def _next_month_start(date: datetime) -> datetime:
     return _month_start(date.replace(day=1) + timedelta(days=32))
 
 
-def _from_timeseries(timeseries: TimeSeries) -> Flux:
-    df = timeseries.to_dataframe()
+def _from_timeseries(df: pd.DataFrame, band: FrequencyBand) -> Flux:
+    name = 'xrsa' if band == FrequencyBand.SHORT else 'xrsb'
 
     # Remove bad quality measurements according to:
     # https://www.ncei.noaa.gov/data/goes-space-environment-monitor/access/science/xrs/GOES_1-15_XRS_Science-Quality_Data_Readme.pdf
-    # Data from GOES 1-7 don't have the xrsb_quality flag yet.
-    if 'xrsb_quality' in df.columns:
-        df = df[df.xrsb_quality == 0]
+    # Data from GOES 1-7 don't have the quality flag yet.
+    quality_flag = f'{name}_quality'
+    if quality_flag in df.columns:
+        df = df[df[quality_flag] == 0]
 
     # Format data into a Flux series
     index = df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
-    return df.set_index(index).xrsb.rename(FLUX_VALUE_NAME)
+    return df.set_index(index)[name].rename(FLUX_VALUE_NAME)
 
 
 _TReturn = TypeVar('_TReturn')
@@ -102,7 +92,7 @@ class ArchiveImporter(Importer):
             year: int, month: int,
             limit_start: datetime,
             search_semaphore: Semaphore,
-    ) -> UnifiedResponse:
+    ) -> dict[int, UnifiedResponse]:
         start = max(limit_start, datetime(year, month, 1, tzinfo=timezone.utc))
         end = _next_month_start(start)
         async with search_semaphore:
@@ -116,7 +106,12 @@ class ArchiveImporter(Importer):
                     attrs.Instrument("XRS")
                 )
             )
-        return _select_best_source(results)
+        return {} if len(results) == 0 else {
+            sat_results[0]['SatelliteNumber']: UnifiedResponse(*(
+                _select_best_source(day_results)
+                for day_results in sat_results.group_by('Start Time').groups
+            )) for sat_results in results[0].group_by('SatelliteNumber').groups
+        }
 
     async def _download_results(self, results: UnifiedResponse) -> Results:
         for i_try in range(self.max_download_tries):
@@ -149,12 +144,12 @@ class ArchiveImporter(Importer):
                 )
         return files  # noqa
 
-    async def _load_files(self, files: Union[Results, str]) -> Flux:
+    async def _load_timeseries(self, files: Union[Results, str]) -> pd.DataFrame:
         return await self._run_in_executor(
-            lambda: _from_timeseries(TimeSeries(files, concatenate=True))
+            lambda: TimeSeries(files, concatenate=True).to_dataframe()
         )
 
-    async def _delete_files(self, files: Results):
+    async def _delete_files(self, files: Iterable[str]):
         await asyncio.gather(*(
             self._run_in_executor(lambda p: Path(p).unlink(), path)
             for path in files
@@ -165,6 +160,8 @@ class ArchiveImporter(Importer):
         Import from the archive as efficiently as possible.
         Only the search is easily parallelize-able because download uses
         the full bandwidth and the database insert locks the GIL too much.
+
+        TODO: optimize again (estimated full import takes 9 days)
         """
         search_semaphore = Semaphore(2)
         result_months = [
@@ -179,31 +176,28 @@ class ArchiveImporter(Importer):
         ]
         for results in result_months:
             results = await results
-            if results is None:
-                continue
-            files = await self._download_results(results)
-            if len(files) == 0:
-                continue
-            files_flux = deque()
-            try:
-                files_flux.append(await self._load_files(files))
-            except KeyboardInterrupt as e:
-                raise e
-            except:  # noqa
-                self._logger.warning(
-                    'Failed to load file batch into memory. Retrying each file individually',
-                    exc_info=True
-                )
-                for file in files:
-                    try:
-                        files_flux.append(await self._load_files(file))
-                    except KeyboardInterrupt as e:
-                        raise e
-                    except:  # noqa
-                        self._logger.exception(f'Failed to load {file} into memory. Skipping')
-            flux = pd.concat(files_flux).loc[start:]
-            await self._import(flux)
-            await self._delete_files(files)
+
+            channels: dict[FluxChannel, Flux] = {}
+            used_files = deque()
+            for satellite, satellite_results in results.items():
+                # Download all files
+                files = await self._download_results(satellite_results)
+                if len(files) == 0:
+                    continue
+
+                # Load all files into memory
+                timeseries = await self._load_timeseries(files)
+
+                # Convert each band
+                for band in (FrequencyBand.SHORT, FrequencyBand.LONG):
+                    channels[FluxChannel(satellite, band, False)] = \
+                        _from_timeseries(timeseries, band).loc[start:]
+
+                # Register files for deletion
+                used_files.extend(files)
+
+            await self._import(channels)
+            await self._delete_files(used_files)
         return timedelta(hours=1)
 
 
