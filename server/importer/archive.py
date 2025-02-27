@@ -54,8 +54,7 @@ def _next_month_start(date: datetime) -> datetime:
 def _from_timeseries(df: pd.DataFrame, band: FrequencyBand) -> Flux:
     name = 'xrsa' if band == FrequencyBand.SHORT else 'xrsb'
 
-    # Remove bad quality measurements according to:
-    # https://www.ncei.noaa.gov/data/goes-space-environment-monitor/access/science/xrs/GOES_1-15_XRS_Science-Quality_Data_Readme.pdf
+    # Remove bad quality measurements.
     # Data from GOES 1-7 don't have the quality flag yet.
     quality_flag = f'{name}_quality'
     if quality_flag in df.columns:
@@ -73,6 +72,10 @@ class ArchiveImporter(Importer):
     """
     Imports highest resolution data (1s-3s) from the data archives:
     https://www.ngdc.noaa.gov/stp/satellite/goes-r.html
+
+    Data guides:
+    - https://www.ncei.noaa.gov/data/goes-space-environment-monitor/access/science/xrs/GOES_1-15_XRS_Science-Quality_Data_Readme.pdf
+    - https://data.ngdc.noaa.gov/platforms/solar-space-observing-satellites/goes/goes16/l2/docs/GOES-R_XRS_L2_Data_Users_Guide.pdf
     """
 
     max_download_tries: int = 5

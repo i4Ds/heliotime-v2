@@ -49,8 +49,9 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     sustained = log_flux.rolling(_SUSTAINED_MOTION_WINDOW, center=True).mean()
 
     # Mask already smooth parts
-    is_rough = (sustained - log_flux).abs() > 0.004
-    is_slightly_rough = (sustained - log_flux).abs() > 0.0035
+    sustained_diff = (sustained - log_flux).abs()
+    is_rough = sustained_diff > 0.004
+    is_slightly_rough = sustained_diff > 0.0035
 
     # Mark valid slopes to not smooth out solar flares.
     # If a big change is actually a flare, it will reside for at least a few seconds
@@ -64,7 +65,7 @@ def _denoise(log_flux: pd.Series) -> pd.Series:
     sustained_velocity_max = _change_speed(sustained).abs() \
         .rolling(_SUSTAINED_MOTION_WINDOW, center=True).sum() \
         .rolling(_SMOOTHING_WINDOW, center=True).max()
-    is_valid_slope = (sustained_velocity_max / rough_velocity_max) > 0.45
+    is_valid_slope = (sustained_velocity_max / rough_velocity_max) > 0.35
 
     # If 20% nearby is rough, smooth also this point.
     is_rough_nearby = (is_rough.rolling(_SMOOTHING_WINDOW, center=True).mean() / 0.2).clip(upper=1)
@@ -105,9 +106,10 @@ def _filter_impossible_dips(log_groups: Sequence[pd.Series]) -> Sequence[pd.Seri
     log_wide_min = log_narrow_min.rolling(timedelta(minutes=30), center=True).min()
     # Calculate the "bottom" of the signal without the dips.
     log_base = pd.concat((
-        log_narrow_min.rolling(timedelta(hours=4), center=True).median(),
-        log_wide_min.rolling(timedelta(hours=16), center=True).median(),
+        log_narrow_min.rolling(timedelta(hours=4), center=True).quantile(0.3),
+        log_wide_min.rolling(timedelta(hours=16), center=True).quantile(0.3),
     ), axis=1).min(axis=1)
+
     filtered_log_groups = deque()
     for log_group in log_groups:
         flat_group = log_group - log_base
@@ -374,7 +376,7 @@ def _remove_outliers(log_flux: pd.Series, is_live: bool) -> Optional[pd.Series]:
     abs_acceleration = _pick_abs_max(backward_acceleration, forward_acceleration)
 
     # Determine data frequency of the majority.
-    # Cannot be assumed to be constant as the source might change each day.
+    # Cannot be assumed to be constant as the resolution might change each day.
     time_delta = cast(pd.Series, log_flux).index.diff()
     median_interval = time_delta.median()
 
@@ -444,8 +446,6 @@ def clean_flux(flux: Flux, is_live: bool) -> Flux:
     """
     Denoises and removes outliers from the provided measured flux.
     Tuned to work on the archive and live data.
-
-    TODO: Consider frequency band (and calibrate for the short band).
 
     :param flux: Raw flux data.
     :param is_live: If the data is from the live source. (meaning 1-minute averaged)
