@@ -69,9 +69,7 @@ class Importer(ABC):
             flux_all = pd.concat([flux_start, flux, flux_end])
 
         # Clean and throw away the bordering data
-        return clean_flux(
-            flux_all, is_live=self.source == FluxSource.LIVE
-        )[reclean_start:reclean_end]
+        return clean_flux(flux_all)[reclean_start:reclean_end]
 
     async def _import(self, channels: dict[FluxChannel, Flux]):
         """
