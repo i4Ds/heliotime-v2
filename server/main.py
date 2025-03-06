@@ -12,8 +12,8 @@ from data.db import create_db_pool, apply_db_migrations
 from data.flux.fetcher import FluxFetcher
 from data.flux.spec.channel import FluxChannel, SATELLITE_COMBINED_ID, FrequencyBand
 from data.flux.spec.data import empty_flux
-from importer.archive import ArchiveImporterProcess
-from importer.live import LiveImporterProcess
+from importer.flux.archive import ArchiveImporterProcess
+from importer.flux.live import LiveImporterProcess
 from utils.logging import configure_logging
 
 # Used while the API doesn't support channel selection
