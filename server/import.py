@@ -3,8 +3,8 @@ import asyncio
 from typer import Typer
 
 from data.db import apply_db_migrations
-from importer.archive import start_archive_import, ArchiveImporterProcess
-from importer.live import start_live_import, LiveImporterProcess
+from importer.flux.archive import start_archive_import, ArchiveImporterProcess
+from importer.flux.live import start_live_import, LiveImporterProcess
 from utils.logging import configure_logging
 
 app = Typer()
