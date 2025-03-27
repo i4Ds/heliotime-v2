@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from data.flux.spec.data import empty_flux, Flux
+from utils.range import DateTimeRange
 
 # Time range at start and end which will not be properly cleaned
 # because there was no bordering data to compare to.
@@ -371,7 +372,7 @@ _LOWER_VALUE_BORDER = -8
 _VALUE_BORDER_SLACK = 0.1
 
 
-def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
+def _remove_outliers(log_flux: pd.Series, time_range: DateTimeRange) -> Optional[pd.Series]:
     # Calculate flux value acceleration (speed of change)
     forward_velocity = _change_speed(log_flux)
     forward_acceleration = _change_speed(forward_velocity)
@@ -470,18 +471,19 @@ def _remove_outliers(log_flux: pd.Series) -> Optional[pd.Series]:
 
     # Remove measurements that don't have enough neighbors to determine their correctness
     # and are often small groups with questionable measurements.
-    # TODO: limit neighborhood size to passed in range (needs additional range parameter)
-    neighbors = log_flux.rolling(CLEAN_BORDER_SIZE * 2, center=True).count()
-    expected_neighbors = (CLEAN_BORDER_SIZE * 2) / interval[log_flux.index]
+    neighborhood_size = min(CLEAN_BORDER_SIZE*2, time_range.delta)
+    neighbors = log_flux.rolling(neighborhood_size, center=True).count()
+    expected_neighbors = neighborhood_size / interval[log_flux.index]
     return log_flux[neighbors >= expected_neighbors * 0.02]
 
 
-def clean_flux(flux: Flux) -> Flux:
+def clean_flux(flux: Flux, time_range: DateTimeRange) -> Flux:
     """
     Denoises and removes outliers from the provided measured flux.
     Tuned to work on the archive and live data.
 
     :param flux: Raw flux data.
+    :param time_range: Time range of the flux data.
     """
     if flux.empty:
         return empty_flux()
@@ -493,7 +495,7 @@ def clean_flux(flux: Flux) -> Flux:
         # Value range is exponential so find outliers with log
         log_flux = np.log10(flux)
     log_flux = _denoise(log_flux)
-    log_flux = _remove_outliers(log_flux)
+    log_flux = _remove_outliers(log_flux, time_range)
     if log_flux is None or log_flux.empty:
         return empty_flux()
     # Return to normal distribution

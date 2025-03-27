@@ -10,6 +10,7 @@ from data.db import connect_db
 from data.flux.spec.channel import FrequencyBand, FluxChannel
 from data.flux.spec.source import FluxSource
 from data.flux.spec.data import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME
+from utils.range import DateTimeRange
 from ._base import Importer, ImporterProcess
 
 _LIVE_BASE_URL = 'https://services.swpc.noaa.gov/json/goes/'
@@ -96,7 +97,7 @@ class LiveImporter(Importer):
                 if wait < min_wait:
                     min_wait = wait
 
-        await self._import(channels)
+        await self._import(channels, DateTimeRange(start, datetime.now(timezone.utc)))
         # Add one second to account for potential timing inaccuracies
         return min_wait + timedelta(seconds=1)
 

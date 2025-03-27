@@ -19,7 +19,7 @@ class FrequencyBand(Enum):
         await connection.set_type_codec(
             'frequency_band',
             encoder=lambda c: c.value.encode(),
-            decoder=lambda v: cls(str(v).upper()),
+            decoder=lambda v: cls(v.decode()),
             schema='public',
             format='binary'
         )

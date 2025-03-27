@@ -20,6 +20,7 @@ from data.db import connect_db
 from data.flux.spec.channel import FluxChannel, FrequencyBand
 from data.flux.spec.data import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux
 from data.flux.spec.source import FluxSource
+from utils.range import DateTimeRange
 from ._base import Importer, ImporterProcess
 
 warnings.filterwarnings(
@@ -29,7 +30,7 @@ warnings.filterwarnings(
 )
 
 
-def _select_best_source(results: QueryResponse) -> QueryResponseRow:
+def _select_best_day_source(results: QueryResponse) -> QueryResponseRow:
     # Assert that all intervals always go an entire day (start is the same for all)
     assert results[0]['Start Time'].to_datetime().time() == time(0, 0, 0, 0)
     end_times = set(results['End Time'])
@@ -41,6 +42,13 @@ def _select_best_source(results: QueryResponse) -> QueryResponseRow:
     # Select highest resolution
     high_res = results[results['Resolution'] == 'flx1s']
     return high_res[0] if len(high_res) >= 1 else results[0]
+
+
+def _select_best_sources(results: QueryResponse) -> UnifiedResponse:
+    return UnifiedResponse(*(
+        _select_best_day_source(day_results)
+        for day_results in results.group_by('Start Time').groups
+    ))
 
 
 def _month_start(date: datetime) -> datetime:
@@ -95,7 +103,7 @@ class ArchiveImporter(Importer):
             year: int, month: int,
             limit_start: datetime,
             search_semaphore: Semaphore,
-    ) -> dict[int, UnifiedResponse]:
+    ) -> tuple[dict[int, UnifiedResponse], DateTimeRange]:
         start = max(limit_start, datetime(year, month, 1, tzinfo=timezone.utc))
         end = _next_month_start(start)
         async with search_semaphore:
@@ -110,11 +118,9 @@ class ArchiveImporter(Importer):
                 )
             )
         return {} if len(results) == 0 else {
-            sat_results[0]['SatelliteNumber']: UnifiedResponse(*(
-                _select_best_source(day_results)
-                for day_results in sat_results.group_by('Start Time').groups
-            )) for sat_results in results[0].group_by('SatelliteNumber').groups
-        }
+            sat_results[0]['SatelliteNumber']: _select_best_sources(sat_results)
+            for sat_results in results[0].group_by('SatelliteNumber').groups
+        }, DateTimeRange(start, end)
 
     async def _download_results(self, results: UnifiedResponse) -> Results:
         for i_try in range(self.max_download_tries):
@@ -178,7 +184,7 @@ class ArchiveImporter(Importer):
             )
         ]
         for results in result_months:
-            results = await results
+            results, time_range = await results
 
             channels: dict[FluxChannel, Flux] = {}
             used_files = deque()
@@ -199,7 +205,7 @@ class ArchiveImporter(Importer):
                 # Register files for deletion
                 used_files.extend(files)
 
-            await self._import(channels)
+            await self._import(channels, time_range)
             await self._delete_files(used_files)
         return timedelta(hours=1)
 
