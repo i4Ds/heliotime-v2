@@ -7,6 +7,7 @@ from asyncpg import Connection, Pool
 from data.flux.spec.channel import FluxChannel
 from data.flux.spec.data import empty_flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, RawFlux
 from data.flux.spec.source import FluxSource
+from utils.range import DateTimeRange
 
 
 def _select_flux(
@@ -37,7 +38,7 @@ def _select_flux(
     return connection.fetch(
         f'''
                 WITH downscale AS(
-                    SELECT time_bucket($1, time) AS bucket, ${max_column} AS flux
+                    SELECT time_bucket($1, time) AS bucket, {max_column} AS flux
                     FROM {relation}
                     WHERE satellite = $2 AND band = $3 AND is_clean = $4 AND $5 <= time AND time < $6
                     GROUP BY bucket
@@ -88,33 +89,30 @@ async def fetch_raw_flux(
     return cast(RawFlux, map(tuple, records))
 
 
-async def import_flux(connection: Connection, source: FluxSource, channels: dict[FluxChannel, Flux]):
+async def import_flux(
+        connection: Connection, source: FluxSource,
+        channels: dict[FluxChannel, tuple[Flux, DateTimeRange]]
+):
     """
-    Inserts or replaces all measurements in the time range of each provided channel
+    Removes and reinserts all measurements in the of each provided channel
     and refreshes the aggregates for all channels in the combined time range.
 
-    Multiple channels can be imported at once and should ideally overlap in time
+    All channels of a time range should ideally be imported at once
     to avoid refreshing the aggregates multiple times.
     """
-    # Clean empty channels
-    channels = {
-        channel: flux
-        for channel, flux in channels.items()
-        if len(flux) > 0
-    }
     if len(channels) == 0:
         return
 
     async with connection.transaction():
-        for channel, flux in channels.items():
+        for channel, (flux, time_range) in channels.items():
             # Delete old entries if they exist
             await connection.execute(
                 f'''
                     DELETE FROM {source.table_name}
                     WHERE satellite = $1 AND band = $2 AND is_clean = $3
-                      AND $4 <= time AND time <= $5;
+                      AND $4 <= time AND time < $5;
                 ''',
-                channel.satellite, channel.band, channel.is_clean, flux.index[0], flux.index[-1]
+                channel.satellite, channel.band, channel.is_clean, time_range.start, time_range.end
             )
             # Insert new entries
             await connection.copy_records_to_table(
@@ -126,8 +124,8 @@ async def import_flux(connection: Connection, source: FluxSource, channels: dict
             )
 
     # refresh_continuous_aggregate() cannot be run within transaction
-    start = min(flux.index[0] for flux in channels.values())
-    end = max(flux.index[-1] for flux in channels.values())
+    start = min(time_range.start for _, time_range in channels.values())
+    end = max(time_range.end for _, time_range in channels.values())
     for resolution in source.resolutions:
         await connection.execute(
             f"""
@@ -162,3 +160,23 @@ async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource) 
     See: https://github.com/timescale/timescaledb/issues/5102
     """
     return await connection.fetchval(f'SELECT MAX(time) FROM {source.table_name}')
+
+
+async def fetch_available_channels(
+        connection: Connection, source: FluxSource, time_range: DateTimeRange = None
+) -> set[FluxChannel]:
+    """
+    Retrieve a list of all flux channels with at least one stored measurement within a specified time range.
+
+    :param connection: Database connection to use for the query
+    :param source: Flux source containing table information
+    :param time_range: Optional time range. If None, the entire time range is queried.
+    :return: List of available flux channels
+    """
+    raw_channels = await connection.fetch(
+        f'SELECT DISTINCT satellite, band, is_clean FROM {source.table_name}'
+    ) if time_range is None else await connection.fetch(
+        f'SELECT DISTINCT satellite, band, is_clean FROM {source.table_name} WHERE $1 <= time AND time < $2',
+        time_range.start, time_range.end
+    )
+    return set(FluxChannel(*channel) for channel in raw_channels)
