@@ -14,6 +14,10 @@ export const metadata: Metadata = {
     'Heliotime.org offers you a new way to discover solar events and flares. View a timeline of all recorded X-Ray data from the GOES spacecrafts.',
   keywords: 'Solar, Events, GOES, X-Ray, Timeline, Flares, Flux, Helioviewer',
   robots: 'noimageindex',
+  other: {
+    // Prevent Dark Reader from inverting the page as it breaks the SVG diagrams.
+    'darkreader-lock': '-',
+  },
 };
 
 export default function RootLayout({
