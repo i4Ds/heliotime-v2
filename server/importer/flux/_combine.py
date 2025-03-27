@@ -120,9 +120,11 @@ def combine_flux_channels(
             # ----- Weight Calculation -----
             weights_list = deque()
             for segment in segments:
-                # Use clean data for segment analysis
-                segment_clean = clean_merged.loc[segment.index.min():segment.index.max()]
-                channel_counts = segment_clean.count()
+                # Use clean version for segment analysis (unless empty)
+                reference_segment = clean_merged.loc[segment.index.min():segment.index.max()]
+                if len(reference_segment) == 0:
+                    reference_segment = segment
+                channel_counts = reference_segment.count()
                 channel_weights = channel_counts / channel_counts.max()
 
                 # Drop channels with insufficient data
