@@ -1,6 +1,6 @@
 # About Heliotime
 
-[Heliotime](https://heliotime.org/) is a fast and interactive tool for exploring solar X-ray flux data from [GOES satellites](https://www.swpc.noaa.gov/products/goes-x-ray-flux). It is designed for anyone interested in solar activity and for scientists to orient themselves.
+[Heliotime](https://heliotime.org/) is a fast and interactive tool for exploring 1-8 Ångstrom solar X-ray flux data from [GOES satellites](https://www.swpc.noaa.gov/products/goes-x-ray-flux). It is designed for anyone interested in solar activity and for scientists to orient themselves.
 
 ## Key Features
 
