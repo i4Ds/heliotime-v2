@@ -122,7 +122,7 @@ def _filter_impossible_dips(log_groups: Sequence[pd.Series]) -> Sequence[pd.Seri
 
     filtered_log_groups = deque()
     for log_group in log_groups:
-        flat_group = log_group - log_base
+        flat_group = log_group - log_base.loc[log_group.index[0]:log_group.index[-1]]
         if flat_group.min() < -0.2:
             # Only cut of dip parts in case the group also contains valid parts.
             log_group = log_group[flat_group > -0.05]
@@ -160,15 +160,29 @@ def _check_group_connectivity(
     if len(log_groups) == 0:
         return outliers, sections
 
-    def limit_sample(raw_sample: pd.Series, end_part=is_forward):
-        """Cut old part of the sample if it's too big."""
+    def limit_sample(raw_sample: pd.Series, extension: pd.Series = None):
+        """Extend with new part and cut old part of the sample if it's too big."""
+        # If extension is provided, check if it's large enough on its own
+        if extension is not None and len(extension) >= target_sample_count:
+            raw_sample = extension
+        elif extension is not None:
+            # Concat only when needed
+            raw_sample = pd.concat(
+                (raw_sample, extension) if is_forward else (extension, raw_sample)
+            )
         if len(raw_sample) == 0:
             return raw_sample
-        return (
-            raw_sample.iloc[-target_sample_count:].loc[raw_sample.index[-1] - CLEAN_BORDER_SIZE:]
-            if end_part else
-            raw_sample.iloc[:target_sample_count].loc[:raw_sample.index[0] + CLEAN_BORDER_SIZE]
-        )
+
+        # Apply limits - first size limit, then time border limit if necessary
+        if is_forward:
+            result = raw_sample.iloc[-target_sample_count:]
+            if len(result) > 0 and result.index[0] < result.index[-1] - CLEAN_BORDER_SIZE:
+                result = result.loc[result.index[-1] - CLEAN_BORDER_SIZE:]
+        else:
+            result = raw_sample.iloc[:target_sample_count]
+            if len(result) > 0 and result.index[-1] > result.index[0] + CLEAN_BORDER_SIZE:
+                result = result.loc[:result.index[0] + CLEAN_BORDER_SIZE]
+        return result
 
     log_groups_iter = iter(log_groups if is_forward else reversed(log_groups))
     log_group = next(log_groups_iter)
@@ -176,9 +190,9 @@ def _check_group_connectivity(
     # Start of uncertainty section (in direction of iteration)
     # First group is always uncertain, because it lacks a previous reference.
     section_start: datetime | None = sample.index[0 if is_forward else -1]
-    section_reference: float | None = sample.median()
+    section_reference: float | None = sample.mean()
     for log_group in log_groups_iter:
-        sample_median = sample.median()
+        sample_mean = sample.mean()
         sample_range = (sample.index[-1] - sample.index[0]).total_seconds()
         sample_age = (
             log_group.index[0] - sample.index[-1]
@@ -187,7 +201,7 @@ def _check_group_connectivity(
         )
 
         # Delta to sampled reference
-        delta = log_group.iloc[0 if is_forward else -1] - sample_median
+        delta = log_group.iloc[0 if is_forward else -1] - sample_mean
         # Allowed delta based on range and age.
         # Creates a cone shape where the allowed delta is bigger for older samples.
         allowed_delta = 0.001 * sample_range + 0.03 * sample_age.total_seconds()
@@ -206,7 +220,7 @@ def _check_group_connectivity(
             section_start = sample.index[0 if is_forward else -1]
             # Use existing sample as reference.
             # Forward will provide the start and backward the end reference.
-            section_reference = sample_median
+            section_reference = sample_mean
             just_opened = True
         # Maybe close uncertainty section
         if section_start is not None:
@@ -230,11 +244,7 @@ def _check_group_connectivity(
                 section_reference = None
 
         # Update sample
-        sample = limit_sample(cast(pd.Series, pd.concat(
-            (sample, log_group)
-            if is_forward else
-            (log_group, sample)
-        )))
+        sample = limit_sample(sample, log_group)
     # Close the last uncertainty section
     if section_start is not None:
         if is_forward:
@@ -433,19 +443,23 @@ def _remove_outliers(log_flux: pd.Series, time_range: DateTimeRange) -> Optional
     # Mark measurements after a large time gaps.
     is_after_gap = time_delta > interval * 10
 
-    # Remove outliers and split at marked.
+    # Remove outliers in all variables to be used.
+    keep_masp = ~(is_clipped_value | has_excessive_acceleration)
+    log_flux = log_flux[keep_masp]
+    abs_velocity = abs_velocity[keep_masp]
+
+    # Split at marked.
     # If a group is bigger than CLEAN_BORDER_SIZE, the group filters will have a bigger dependency range than allowed.
     # Because very big groups are typically already clean they likely won't be filtered, and we can ignore this issue.
-    group_id = (clipped_edge | high_acceleration_edge | is_after_gap).cumsum()
-    log_groups = log_flux[~(is_clipped_value | has_excessive_acceleration)].groupby(group_id)
+    group_id = (clipped_edge | high_acceleration_edge | is_after_gap)[keep_masp].cumsum()
+    log_groups = log_flux.groupby(group_id)
 
     # Filter groups with unnatural velocities
     filtered_log_groups = deque()
     for _, log_group in log_groups:
-        group_abs_velocity = abs_velocity.loc[
-            # If possible omit the first velocity, as it isn't part of the group
-            log_group.index[1:] if len(log_group) > 1 else log_group.index
-        ]
+        # If possible omit the first velocity, as it isn't part of the group
+        start_index = 1 if len(log_group) > 1 else 0
+        group_abs_velocity = abs_velocity.loc[log_group.index[start_index]:log_group.index[-1]]
         if (
                 # Extremely high sustained velocity is probably an outlier
                 group_abs_velocity.mean() > 0.01 or
@@ -471,7 +485,7 @@ def _remove_outliers(log_flux: pd.Series, time_range: DateTimeRange) -> Optional
 
     # Remove measurements that don't have enough neighbors to determine their correctness
     # and are often small groups with questionable measurements.
-    neighborhood_size = min(CLEAN_BORDER_SIZE*2, time_range.delta)
+    neighborhood_size = min(CLEAN_BORDER_SIZE * 2, time_range.delta)
     neighbors = log_flux.rolling(neighborhood_size, center=True).count()
     expected_neighbors = neighborhood_size / interval[log_flux.index]
     return log_flux[neighbors >= expected_neighbors * 0.02]
