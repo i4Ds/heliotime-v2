@@ -114,6 +114,8 @@ async def import_flux(
                 ''',
                 channel.satellite, channel.band, channel.is_clean, time_range.start, time_range.end
             )
+            if len(flux) == 0:
+                continue
             # Insert new entries
             await connection.copy_records_to_table(
                 source.table_name,
@@ -123,7 +125,7 @@ async def import_flux(
                 )
             )
 
-    # refresh_continuous_aggregate() cannot be run within transaction
+    # refresh_continuous_aggregate() cannot be run within transactions
     start = min(time_range.start for _, time_range in channels.values())
     end = max(time_range.end for _, time_range in channels.values())
     for resolution in source.resolutions:

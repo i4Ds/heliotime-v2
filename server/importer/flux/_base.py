@@ -3,10 +3,12 @@ import dataclasses
 import logging
 import time
 from abc import ABC, abstractmethod
+from asyncio import Future
 from collections import deque
+from concurrent.futures import ProcessPoolExecutor
 from datetime import timedelta, datetime
 from multiprocessing import Process
-from typing import Callable, Coroutine, Any
+from typing import Callable, Coroutine, Any, TypeVar
 
 import pandas as pd
 from asyncpg import Connection
@@ -28,16 +30,24 @@ def _source_logger(source: FluxSource) -> logging.Logger:
     return _logger.getChild(source.name.lower())
 
 
+_TReturn = TypeVar('_TReturn')
+
+
 class Importer(ABC):
     source: FluxSource
 
     _logger: logging.Logger
     _connection: Connection
+    _process_executor: ProcessPoolExecutor
 
-    def __init__(self, source: FluxSource, connection: Connection):
+    def __init__(self, source: FluxSource, connection: Connection, process_executor: ProcessPoolExecutor):
         self.source = source
         self._logger = _source_logger(source)
         self._connection = connection
+        self._process_executor = process_executor
+
+    def _run_in_subprocess(self, function: Callable[..., _TReturn], *args: Any) -> Future[_TReturn]:
+        return asyncio.get_event_loop().run_in_executor(self._process_executor, function, *args)
 
     async def _extend_flux(
             self, channel: FluxChannel, flux: Flux,
@@ -79,8 +89,9 @@ class Importer(ABC):
         reclean_range = time_range.extend(CLEAN_BORDER_SIZE)
         fetch_range = reclean_range.extend(CLEAN_BORDER_SIZE)
         flux_all = await self._extend_flux(channel, flux, time_range, fetch_range)
+        flux_clean = await self._run_in_subprocess(clean_flux, flux_all, fetch_range)
         # Clean and throw away the bordering data
-        return clean_flux(flux_all, fetch_range)[reclean_range.start:reclean_range.end], reclean_range
+        return flux_clean[reclean_range.start:reclean_range.end], reclean_range
 
     async def _combine(
             self, channels: dict[FluxChannel, tuple[Flux, DateTimeRange]]
@@ -114,7 +125,7 @@ class Importer(ABC):
             )
 
         # Combine the channels
-        combined_channels = combine_flux_channels(input_channels, fetch_range)
+        combined_channels = combine_flux_channels(input_channels, fetch_range, self._process_executor)
         return {
             channel: (combined_channels[channel][recombine_range.start:recombine_range.end], recombine_range)
             for channel in combined_channels
@@ -148,8 +159,7 @@ class Importer(ABC):
         # Log final import information
         entry_count = sum(len(flux) for flux, _ in channels.values())
         self._logger.info(
-            f'Importing {len(channels)} channels with {entry_count} entries '
-            f'from {time_range.start} to {time_range.end}'
+            f'Importing {len(channels)} channels with {entry_count} entries for {time_range}'
         )
 
         # Import the cleaned versions
