@@ -1,4 +1,5 @@
 import re
+from concurrent.futures import ProcessPoolExecutor
 from datetime import timedelta, datetime, timezone
 from typing import Optional, Generator
 
@@ -63,8 +64,8 @@ def _from_live_json(json: list[dict], frequency: FrequencyBand, start: datetime)
 class LiveImporter(Importer):
     _session: ClientSession
 
-    def __init__(self, connection: Connection, session: ClientSession):
-        super().__init__(FluxSource.LIVE, connection)
+    def __init__(self, connection: Connection, process_executor: ProcessPoolExecutor, session: ClientSession):
+        super().__init__(FluxSource.LIVE, connection, process_executor)
         self._session = session
 
     async def _import_from(self, start: datetime) -> timedelta:
@@ -105,9 +106,10 @@ class LiveImporter(Importer):
 async def start_live_import():
     connection = await connect_db()
     try:
-        async with ClientSession() as session:
-            importer = LiveImporter(connection, session)
-            await importer.start_import()
+        with ProcessPoolExecutor() as executor:
+            async with ClientSession() as session:
+                importer = LiveImporter(connection, executor, session)
+                await importer.start_import()
     finally:
         await connection.close()
 

@@ -1,11 +1,12 @@
 import asyncio
-import warnings
-from asyncio import Future, Semaphore
+import functools
+from asyncio import Semaphore, Future
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import timedelta, datetime, timezone, time
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Union, Iterable
+from typing import Union, Iterable, Callable, Any, TypeVar
 
 import pandas as pd
 from asyncpg import Connection
@@ -18,16 +19,10 @@ from sunpy.timeseries import TimeSeries
 
 from data.db import connect_db
 from data.flux.spec.channel import FluxChannel, FrequencyBand
-from data.flux.spec.data import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux
+from data.flux.spec.data import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, empty_flux
 from data.flux.spec.source import FluxSource
 from utils.range import DateTimeRange
 from ._base import Importer, ImporterProcess
-
-warnings.filterwarnings(
-    'ignore',
-    message='This download has been started in a thread which is not the main thread. '
-            'You will not be able to interrupt the download.'
-)
 
 
 def _select_best_day_source(results: QueryResponse) -> QueryResponseRow:
@@ -89,52 +84,52 @@ class ArchiveImporter(Importer):
     max_download_tries: int = 5
     download_backoff: timedelta = timedelta(seconds=30)
 
-    _executor: ThreadPoolExecutor
+    _thread_executor: ThreadPoolExecutor
 
-    def __init__(self, connection: Connection, executor: ThreadPoolExecutor):
-        super().__init__(FluxSource.ARCHIVE, connection)
-        self._executor = executor
+    def __init__(
+            self, connection: Connection,
+            process_executor: ProcessPoolExecutor,
+            thread_executor: ThreadPoolExecutor
+    ):
+        super().__init__(FluxSource.ARCHIVE, connection, process_executor)
+        self._thread_executor = thread_executor
 
-    def _run_in_executor(self, function: Callable[..., _TReturn], *args: Any) -> Future[_TReturn]:
-        return asyncio.get_event_loop().run_in_executor(self._executor, function, *args)
+    def _run_in_thread(self, function: Callable[..., _TReturn], *args: Any) -> Future[_TReturn]:
+        return asyncio.get_event_loop().run_in_executor(self._thread_executor, function, *args)
 
-    async def _search_month(
+    async def _search(
             self,
-            year: int, month: int,
-            limit_start: datetime,
+            time_range: DateTimeRange,
             search_semaphore: Semaphore,
-    ) -> tuple[dict[int, UnifiedResponse], DateTimeRange]:
-        start = max(limit_start, datetime(year, month, 1, tzinfo=timezone.utc))
-        end = _next_month_start(start)
+    ) -> dict[int, UnifiedResponse]:
         async with search_semaphore:
-            results = await self._run_in_executor(
+            results = await self._run_in_thread(
                 lambda: Fido.search(
                     attrs.Time(
-                        start,
+                        time_range.start,
                         # Search treats end as inclusive
-                        end - timedelta(milliseconds=1)
+                        time_range.end - timedelta(milliseconds=1)
                     ),
                     attrs.Instrument("XRS")
                 )
             )
-        return {} if len(results) == 0 else {
+        return {} if len(results[0]) == 0 else {
             sat_results[0]['SatelliteNumber']: _select_best_sources(sat_results)
             for sat_results in results[0].group_by('SatelliteNumber').groups
-        }, DateTimeRange(start, end)
+        }
 
     async def _download_results(self, results: UnifiedResponse) -> Results:
         for i_try in range(self.max_download_tries):
-            files = await self._run_in_executor(
-                lambda: Fido.fetch(
-                    results,
-                    # Download everything at once (max days in a month).
-                    max_conn=31,
-                    progress=False,
-                    # The files are deleted after import so leftover files
-                    # are probably corrupt from a previous crash.
-                    overwrite=True
-                )
-            )
+            files = await self._run_in_subprocess(functools.partial(
+                Fido.fetch,
+                results,
+                # Download everything at once (max days in a month).
+                max_conn=31,
+                progress=False,
+                # The files are deleted after import so leftover files
+                # are probably corrupt from a previous crash.
+                overwrite=True
+            ))
             if len(files.errors) == 0:
                 break
             if i_try < self.max_download_tries - 1:
@@ -153,14 +148,16 @@ class ArchiveImporter(Importer):
                 )
         return files  # noqa
 
-    async def _load_timeseries(self, files: Union[Results, str]) -> pd.DataFrame:
-        return await self._run_in_executor(
+    async def _load_timeseries(self, files: Union[Results, str]) -> pd.DataFrame | None:
+        if len(files) == 0:
+            return None
+        return await self._run_in_thread(
             lambda: TimeSeries(files, concatenate=True).to_dataframe()
         )
 
     async def _delete_files(self, files: Iterable[str]):
         await asyncio.gather(*(
-            self._run_in_executor(lambda p: Path(p).unlink(), path)
+            self._run_in_thread(lambda: Path(path).unlink(missing_ok=True))
             for path in files
         ))
 
@@ -169,42 +166,56 @@ class ArchiveImporter(Importer):
         Import from the archive as efficiently as possible.
         Only the search is easily parallelize-able because download uses
         the full bandwidth and the database insert locks the GIL too much.
-
-        TODO: optimize again (estimated full import takes 9 days)
         """
+        # Search for files in parallel monthly batches
         search_semaphore = Semaphore(2)
-        result_months = [
-            asyncio.create_task(self._search_month(
-                date.year, date.month,
-                start, search_semaphore
-            ))
-            for date in pd.date_range(
-                _month_start(start), datetime.now(timezone.utc),
-                freq='MS'
+        now = datetime.now(timezone.utc)
+        months = pd.date_range(
+            _month_start(start), now,
+            freq='MS'
+        )
+        searches = deque()
+        for date in months:
+            month_start = datetime(date.year, date.month, 1, tzinfo=timezone.utc)
+            time_range = DateTimeRange(
+                max(start, month_start),
+                min(_next_month_start(month_start), now)
             )
-        ]
-        for results in result_months:
-            results, time_range = await results
+            search_future = asyncio.create_task(self._search(
+                time_range, search_semaphore
+            ))
+            searches.append((search_future, time_range))
 
-            channels: dict[FluxChannel, Flux] = {}
+        # Download and import the results sequentially
+        for search_future, time_range in searches:
+            search_results = await search_future
+            total_found_files = sum(len(r) for r in search_results.values())
+            self._logger.info(
+                f'Found {total_found_files} files from {len(search_results)} satellites for {time_range}'
+            )
+
+            # Download sequentially and load into memory concurrently
             used_files = deque()
-            for satellite, satellite_results in results.items():
-                # Download all files
+            timeseries_tasks = {}
+            for satellite, satellite_results in search_results.items():
                 files = await self._download_results(satellite_results)
-                if len(files) == 0:
-                    continue
-
-                # Load all files into memory
-                timeseries = await self._load_timeseries(files)
-
-                # Convert each band
-                for band in (FrequencyBand.SHORT, FrequencyBand.LONG):
-                    channels[FluxChannel(satellite, band, False)] = \
-                        _from_timeseries(timeseries, band).loc[start:]
-
-                # Register files for deletion
+                timeseries_tasks[satellite] = asyncio.create_task(self._load_timeseries(files))
                 used_files.extend(files)
 
+            # Collect and convert all timeseries
+            channels: dict[FluxChannel, Flux] = {}
+            for satellite, timeseries_future in timeseries_tasks.items():
+                timeseries = await timeseries_future
+                for band in (FrequencyBand.SHORT, FrequencyBand.LONG):
+                    if timeseries is None:
+                        flux = empty_flux()
+                    else:
+                        flux = _from_timeseries(timeseries, band)
+                        if len(flux) != 0 and flux.index[0] < start:
+                            flux = flux.loc[start:]
+                    channels[FluxChannel(satellite, band, False)] = flux
+
+            # Import the data and clean up
             await self._import(channels, time_range)
             await self._delete_files(used_files)
         return timedelta(hours=1)
@@ -213,9 +224,10 @@ class ArchiveImporter(Importer):
 async def start_archive_import():
     connection = await connect_db()
     try:
-        with ThreadPoolExecutor() as executor:
-            importer = ArchiveImporter(connection, executor)
-            await importer.start_import()
+        with ProcessPoolExecutor() as process_executor:
+            with ThreadPoolExecutor() as thread_executor:
+                importer = ArchiveImporter(connection, process_executor, thread_executor)
+                await importer.start_import()
     finally:
         await connection.close()
 
