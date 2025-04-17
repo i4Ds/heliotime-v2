@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Future
 from collections import deque
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta, datetime
 from multiprocessing import Process
 from typing import Callable, Coroutine, Any, TypeVar
@@ -38,16 +38,16 @@ class Importer(ABC):
 
     _logger: logging.Logger
     _connection: Connection
-    _process_executor: ProcessPoolExecutor
+    _thread_executor: ThreadPoolExecutor
 
-    def __init__(self, source: FluxSource, connection: Connection, process_executor: ProcessPoolExecutor):
+    def __init__(self, source: FluxSource, connection: Connection, thread_executor: ThreadPoolExecutor):
         self.source = source
         self._logger = _source_logger(source)
         self._connection = connection
-        self._process_executor = process_executor
+        self._thread_executor = thread_executor
 
-    def _run_in_subprocess(self, function: Callable[..., _TReturn], *args: Any) -> Future[_TReturn]:
-        return asyncio.get_event_loop().run_in_executor(self._process_executor, function, *args)
+    def _run_in_thread(self, function: Callable[..., _TReturn], *args: Any) -> Future[_TReturn]:
+        return asyncio.get_event_loop().run_in_executor(self._thread_executor, function, *args)
 
     async def _extend_flux(
             self, channel: FluxChannel, flux: Flux,
@@ -89,7 +89,7 @@ class Importer(ABC):
         reclean_range = time_range.extend(CLEAN_BORDER_SIZE)
         fetch_range = reclean_range.extend(CLEAN_BORDER_SIZE)
         flux_all = await self._extend_flux(channel, flux, time_range, fetch_range)
-        flux_clean = await self._run_in_subprocess(clean_flux, flux_all, fetch_range)
+        flux_clean = await self._run_in_thread(clean_flux, flux_all, fetch_range)
         # Clean and throw away the bordering data
         return flux_clean[reclean_range.start:reclean_range.end], reclean_range
 
@@ -125,7 +125,7 @@ class Importer(ABC):
             )
 
         # Combine the channels
-        combined_channels = combine_flux_channels(input_channels, fetch_range, self._process_executor)
+        combined_channels = combine_flux_channels(input_channels, fetch_range, self._thread_executor)
         return {
             channel: (combined_channels[channel][recombine_range.start:recombine_range.end], recombine_range)
             for channel in combined_channels

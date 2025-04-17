@@ -1,12 +1,11 @@
 import asyncio
-import functools
-from asyncio import Semaphore, Future
+import warnings
+from asyncio import Semaphore
 from collections import deque
-from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import timedelta, datetime, timezone, time
 from pathlib import Path
-from typing import Union, Iterable, Callable, Any, TypeVar
+from typing import Union, Iterable, TypeVar
 
 import pandas as pd
 from asyncpg import Connection
@@ -23,6 +22,12 @@ from data.flux.spec.data import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, empty_fl
 from data.flux.spec.source import FluxSource
 from utils.range import DateTimeRange
 from ._base import Importer, ImporterProcess
+
+warnings.filterwarnings(
+    'ignore',
+    message='This download has been started in a thread which is not the main thread. '
+            'You will not be able to interrupt the download.'
+)
 
 
 def _select_best_day_source(results: QueryResponse) -> QueryResponseRow:
@@ -84,18 +89,11 @@ class ArchiveImporter(Importer):
     max_download_tries: int = 5
     download_backoff: timedelta = timedelta(seconds=30)
 
-    _thread_executor: ThreadPoolExecutor
-
     def __init__(
             self, connection: Connection,
-            process_executor: ProcessPoolExecutor,
             thread_executor: ThreadPoolExecutor
     ):
-        super().__init__(FluxSource.ARCHIVE, connection, process_executor)
-        self._thread_executor = thread_executor
-
-    def _run_in_thread(self, function: Callable[..., _TReturn], *args: Any) -> Future[_TReturn]:
-        return asyncio.get_event_loop().run_in_executor(self._thread_executor, function, *args)
+        super().__init__(FluxSource.ARCHIVE, connection, thread_executor)
 
     async def _search(
             self,
@@ -120,8 +118,7 @@ class ArchiveImporter(Importer):
 
     async def _download_results(self, results: UnifiedResponse) -> Results:
         for i_try in range(self.max_download_tries):
-            files = await self._run_in_subprocess(functools.partial(
-                Fido.fetch,
+            files = await self._run_in_thread(lambda: Fido.fetch(
                 results,
                 # Download everything at once (max days in a month).
                 max_conn=31,
@@ -224,10 +221,9 @@ class ArchiveImporter(Importer):
 async def start_archive_import():
     connection = await connect_db()
     try:
-        with ProcessPoolExecutor() as process_executor:
-            with ThreadPoolExecutor() as thread_executor:
-                importer = ArchiveImporter(connection, process_executor, thread_executor)
-                await importer.start_import()
+        with ThreadPoolExecutor() as executor:
+            importer = ArchiveImporter(connection, executor)
+            await importer.start_import()
     finally:
         await connection.close()
 
