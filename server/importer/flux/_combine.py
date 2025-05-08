@@ -236,6 +236,11 @@ def combine_flux_channels(
             executor.submit(_combine_band, band, band_channels, time_range)
             for band, band_channels in channels_by_band.items()
         ]
-        for future in concurrent.futures.as_completed(futures):
-            result_channels.update(future.result())
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                result_channels.update(future.result())
+        except:  # noqa
+            for future in futures:
+                future.cancel()
+            raise
     return result_channels

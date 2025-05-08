@@ -1,3 +1,5 @@
+from typing import Callable
+
 import asyncpg
 from alembic import command
 from alembic.config import Config
@@ -21,10 +23,13 @@ async def connect_db() -> Connection:
     return connection
 
 
-def create_db_pool() -> Pool:
+def create_db_pool(max_size: int = DATABASE_POOL_SIZE) -> Pool:
     return asyncpg.create_pool(
         DATABASE_URL,
-        max_size=DATABASE_POOL_SIZE,
-        min_size=min(10, DATABASE_POOL_SIZE),
+        max_size=max_size,
+        min_size=1,
         init=_register_codecs
     )
+
+
+DbPoolFactory = Callable[[], Pool]

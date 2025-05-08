@@ -1,4 +1,6 @@
+from collections import deque
 from datetime import timedelta, datetime
+from io import BytesIO, TextIOWrapper
 from typing import Optional, Awaitable, Callable, cast
 
 import pandas as pd
@@ -104,30 +106,55 @@ async def import_flux(
         return
 
     async with connection.transaction():
-        for channel, (flux, time_range) in channels.items():
-            # Delete old entries if they exist
-            await connection.execute(
-                f'''
-                    DELETE FROM {source.table_name}
-                    WHERE satellite = $1 AND band = $2 AND is_clean = $3
-                      AND $4 <= time AND time < $5;
+        # Delete existing entries in the time range
+        delete_conditions = deque()
+        delete_params = deque()
+        for channel, (_, time_range) in channels.items():
+            param_index = len(delete_params) + 1
+            delete_conditions.append(
+                f"(satellite = ${param_index} AND band = ${param_index + 1} AND is_clean = ${param_index + 2} "
+                f"AND ${param_index + 3} <= time AND time < ${param_index + 4})"
+            )
+            delete_params.extend([
+                channel.satellite, channel.band, channel.is_clean,
+                time_range.start, time_range.end
+            ])
+        await connection.execute(
+            f'''
+                DELETE FROM {source.table_name}
+                WHERE {" OR ".join(delete_conditions)}
                 ''',
-                channel.satellite, channel.band, channel.is_clean, time_range.start, time_range.end
-            )
-            if len(flux) == 0:
-                continue
-            # Insert new entries
-            await connection.copy_records_to_table(
-                source.table_name,
-                records=(
-                    (time, value, channel.satellite, channel.band, channel.is_clean)
-                    for time, value in flux.items()
-                )
-            )
+            *delete_params
+        )
 
-    # refresh_continuous_aggregate() cannot be run within transactions
-    start = min(time_range.start for _, time_range in channels.values())
-    end = max(time_range.end for _, time_range in channels.values())
+        # Insert new entries with fast to_csv & copy
+        with BytesIO() as buffer:
+            wrapper = TextIOWrapper(buffer, encoding='utf-8')
+            for index, (channel, (flux, _)) in enumerate(channels.items()):
+                if len(flux) == 0:
+                    continue
+                if index > 0:
+                    # Reset buffer before reuse
+                    buffer.seek(0)
+                    buffer.truncate()
+
+                # Should already be NaN-free, but just in case.
+                flux.dropna().to_frame().assign(
+                    satellite=channel.satellite,
+                    band=channel.band.value,
+                    is_clean=int(channel.is_clean),
+                ).to_csv(
+                    wrapper, header=False, sep='\t',
+                    # 9 digits preserves float32 precision
+                    float_format="%.9g"
+                )
+                wrapper.flush()
+                buffer.seek(0)
+                await connection.copy_to_table(source.table_name, source=buffer)
+
+    # Refresh the continuous aggregates for all channels.
+    # refresh_continuous_aggregate() cannot be run within transactions.
+    time_range = DateTimeRange.which_includes([r for _, r in channels.values()])
     for resolution in source.resolutions:
         await connection.execute(
             f"""
@@ -137,12 +164,12 @@ async def import_flux(
                 )
             """,
             # Extend update range to include the buckets at the edge
-            start - resolution.size, end + resolution.size
+            time_range.start - resolution.size, time_range.end + resolution.size
         )
 
 
 async def fetch_flux_timestamp_range(
-        connection: Connection, source: FluxSource, channel: FluxChannel
+        connection: Connection | Pool, source: FluxSource, channel: FluxChannel
 ) -> tuple[datetime, datetime] | None:
     """
     Can be extremely slow if there are a lot of chunks.
@@ -156,7 +183,7 @@ async def fetch_flux_timestamp_range(
     return None if start is None else (start, end)
 
 
-async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource) -> Optional[datetime]:
+async def fetch_last_flux_timestamp(connection: Connection | Pool, source: FluxSource) -> Optional[datetime]:
     """
     Can be extremely slow if there are a lot of chunks.
     See: https://github.com/timescale/timescaledb/issues/5102
@@ -165,7 +192,7 @@ async def fetch_last_flux_timestamp(connection: Connection, source: FluxSource) 
 
 
 async def fetch_available_channels(
-        connection: Connection, source: FluxSource, time_range: DateTimeRange = None
+        connection: Connection | Pool, source: FluxSource, time_range: DateTimeRange = None
 ) -> set[FluxChannel]:
     """
     Retrieve a list of all flux channels with at least one stored measurement within a specified time range.
