@@ -38,6 +38,7 @@ ALTER TABLE {table_name}
     ALTER COLUMN satellite DROP DEFAULT,
     ALTER COLUMN band DROP DEFAULT,
     ALTER COLUMN is_clean DROP DEFAULT;
+DROP INDEX {table_name}_time_idx; -- Replaced by the new primary key
 '''
 
 
@@ -55,7 +56,7 @@ def _create_aggregate(
     return f'''
 CREATE MATERIALIZED VIEW {view_name}
             (time, satellite, band, is_clean, flux_min, flux_max, count) 
-            WITH (timescaledb.continuous)
+            WITH (timescaledb.continuous, timescaledb.create_group_indexes=false)
 AS
 SELECT time_bucket(INTERVAL '{bucket_size}', time) AS bucket,
        satellite,
@@ -64,9 +65,10 @@ SELECT time_bucket(INTERVAL '{bucket_size}', time) AS bucket,
        {min_max_count}
 FROM {parent_name}
 GROUP BY bucket, satellite, band, is_clean
-ORDER BY bucket
-WITH NO DATA 
-'''  # ^ With no data to first set the chunk size
+ORDER BY bucket 
+WITH NO DATA; -- With no data to first set the chunk size
+CREATE INDEX {view_name}_idx ON {view_name} (satellite, band, is_clean, time);
+'''
 
 
 # All active chunks should fill 25% of memory as recommended:
@@ -83,7 +85,7 @@ _COMPRESSED_CHUNK_BYTES = min(max(
             20  # 20 compressed chunks
     ),
     pow(10, 6) * 8.4),  # Compressed chunks should hold at least 1 million rows
-    pow(10, 9) / 26  # Uncompressed chunks shouldn't exceed 1GB
+    0.5 * pow(10, 9) / 26  # Uncompressed chunks shouldn't exceed 0.5GB
 )
 
 
@@ -169,6 +171,9 @@ def upgrade() -> None:
     op.execute(_create_aggregate(
         'flux_live_5d', 'flux_live_12h', '5 days', False
     ))
+
+    # Remove decompression limit, as chunks can be larger than the default limit.
+    op.execute('SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 0')
 
     # Enable compression
     op.execute(_enable_compression('flux_archive', True))

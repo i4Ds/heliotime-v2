@@ -3,16 +3,18 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta, datetime, timezone
 from typing import Optional, Generator
 
+import asyncpg
 import pandas as pd
 from aiohttp import ClientSession
-from asyncpg import Connection
 
-from data.db import connect_db
+from data.db import create_db_pool
+from data.flux.access import import_flux
 from data.flux.spec.channel import FrequencyBand, FluxChannel
 from data.flux.spec.data import Flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME
 from data.flux.spec.source import FluxSource
 from utils.range import DateTimeRange
-from ._base import Importer, ImporterProcess
+from ._base import Importer, ImporterProcess, log_import
+from ._prepare import prepare_flux_channels
 
 _LIVE_BASE_URL = 'https://services.swpc.noaa.gov/json/goes/'
 _FREQUENCY_TO_ENERGY = {
@@ -62,11 +64,24 @@ def _from_live_json(json: list[dict], frequency: FrequencyBand, start: datetime)
 
 
 class LiveImporter(Importer):
-    _session: ClientSession
+    _thread_executor: ThreadPoolExecutor | None
+    _session: ClientSession | None
 
-    def __init__(self, connection: Connection, thread_executor: ThreadPoolExecutor, session: ClientSession):
-        super().__init__(FluxSource.LIVE, connection, thread_executor)
-        self._session = session
+    def __init__(self, connection: asyncpg.Pool):
+        super().__init__(FluxSource.LIVE, connection)
+        self._thread_executor = None
+        self._session = None
+
+    async def __aenter__(self):
+        self._thread_executor = ThreadPoolExecutor()
+        self._session = ClientSession()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._thread_executor:
+            self._thread_executor.shutdown(wait=True)
+        if self._session:
+            await self._session.close()
 
     async def _import_from(self, start: datetime) -> timedelta:
         """
@@ -74,6 +89,9 @@ class LiveImporter(Importer):
         Will not raise any error if some of the range is no longer available
         (older than a week) but just import the available part.
         """
+        if not self._thread_executor or not self._session:
+            raise RuntimeError("LiveImporter must be used as a context manager.")
+
         channels: dict[FluxChannel, Flux] = {}
         min_wait = timedelta(seconds=60)
         for primary in (True, False):
@@ -98,20 +116,23 @@ class LiveImporter(Importer):
                 if wait < min_wait:
                     min_wait = wait
 
-        await self._import(channels, DateTimeRange(start, datetime.now(timezone.utc)))
+        prepared_channels = await prepare_flux_channels(
+            self._thread_executor, self._connection, self.source,
+            channels, DateTimeRange(start, datetime.now(timezone.utc))
+        )
+
+        log_import(self._logger, prepared_channels)
+        async with self._connection.acquire() as connection:
+            await import_flux(connection, self.source, prepared_channels)
+
         # Add one second to account for potential timing inaccuracies
         return min_wait + timedelta(seconds=1)
 
 
 async def start_live_import():
-    connection = await connect_db()
-    try:
-        with ThreadPoolExecutor() as executor:
-            async with ClientSession() as session:
-                importer = LiveImporter(connection, executor, session)
-                await importer.start_import()
-    finally:
-        await connection.close()
+    async with create_db_pool() as connection:
+        async with LiveImporter(connection) as importer:
+            await importer.start_import()
 
 
 class LiveImporterProcess(ImporterProcess):
