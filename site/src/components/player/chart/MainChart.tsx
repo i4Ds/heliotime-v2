@@ -152,10 +152,10 @@ export function MainChart(props: PositionSizeProps) {
   const clickPointerId = useRef<number | undefined>(undefined);
   const handlePointerDown = useCallback(
     (event: React.PointerEvent) => {
-      if (shouldBrush(event)) return;
+      if (event.button !== 0 || shouldBrush(event)) return;
       const point = localPoint(event) ?? undefined;
       if (!stack.maybeAdd(event, point)) return;
-      setHoverPoint(stack.length < 2 ? point : undefined);
+      setHoverPoint(stack.length === 1 ? point : undefined);
       if (stack.length === 1) clickPointerId.current = event.pointerId;
     },
     [stack]
@@ -202,6 +202,7 @@ export function MainChart(props: PositionSizeProps) {
     const point = localPoint(event);
     if (point === null) return;
     state.setTimestamp(timeScale.invert(point.x).getTime());
+    state.commitToHistory();
     clickPointerId.current = undefined;
   };
   useWindowEvent('pointerup', handlePointerEnd);
@@ -294,10 +295,11 @@ export function MainChart(props: PositionSizeProps) {
         onBrushEnd={(zoomView) => {
           setZoomBrush(undefined);
           if (zoomView === undefined) return;
-          state.setView(
-            [timeScale.invert(zoomView[0]).getTime(), timeScale.invert(zoomView[1]).getTime()],
-            true
-          );
+          state.setView([
+            timeScale.invert(zoomView[0]).getTime(),
+            timeScale.invert(zoomView[1]).getTime(),
+          ]);
+          state.commitToHistory();
         }}
       />
 

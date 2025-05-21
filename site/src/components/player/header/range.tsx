@@ -46,7 +46,10 @@ function InternalRangeDropdown({ className, ranges }: RangeDropdownProps & Inter
               title={tooltip}
               type="button"
               className="btn-text text-left"
-              onClick={() => state.setFollowView(sizeMs)}
+              onClick={() => {
+                state.setFollowView(sizeMs);
+                state.commitToHistory();
+              }}
             >
               {longName}
             </PopoverClose>
@@ -55,7 +58,10 @@ function InternalRangeDropdown({ className, ranges }: RangeDropdownProps & Inter
             title="View everything"
             type="button"
             className="btn-text text-left"
-            onClick={() => state.setView(state.range(), true)}
+            onClick={() => {
+              state.setView(state.range());
+              state.commitToHistory();
+            }}
           >
             All
           </PopoverClose>
@@ -86,7 +92,10 @@ function InternalRangeButtons({ buttonsClassName, ranges }: RangeButtonsProps & 
           key={shortName}
           type="button"
           className={buttonsClassName}
-          onClick={() => state.setFollowView(sizeMs)}
+          onClick={() => {
+            state.setFollowView(sizeMs);
+            state.commitToHistory();
+          }}
           title={`View ${tooltip}`}
         >
           {shortName}
@@ -95,7 +104,10 @@ function InternalRangeButtons({ buttonsClassName, ranges }: RangeButtonsProps & 
       <button
         type="button"
         className={buttonsClassName}
-        onClick={() => state.setView(state.range(), true)}
+        onClick={() => {
+          state.setView(state.range());
+          state.commitToHistory();
+        }}
         title="View everything"
       >
         All

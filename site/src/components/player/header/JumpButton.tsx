@@ -1,5 +1,5 @@
 import { faCalendarDay } from '@fortawesome/free-solid-svg-icons';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { OnArgs } from 'react-calendar';
 import { Value } from 'react-calendar/dist/esm/shared/types.js';
 import IconButton from './IconButton';
@@ -23,7 +23,7 @@ function fromUtc(timestamp: number): Date {
   return new Date(timestamp + offset);
 }
 
-function JumpCalendar() {
+function JumpCalendar({ onViewSet }: { onViewSet: () => void }) {
   const state = usePlayerState();
   const { range, view } = usePlayerRenderState();
   const defaultCalendarView = useMemo(
@@ -62,8 +62,9 @@ function JumpCalendar() {
         endUtc = new Date(toUtc(value[1]) + 1);
       }
       state.setView([startUtc, endUtc.getTime()]);
+      onViewSet();
     },
-    [state]
+    [onViewSet, state]
   );
   const onCalendarViewChange = useCallback(
     ({ activeStartDate, view: newView, value }: OnArgs) => {
@@ -96,12 +97,13 @@ function JumpCalendar() {
         }
       }
       state.setView([startUtc, endUtc.getTime()]);
+      onViewSet();
 
       // Remove marked view as entire view is active
       // eslint-disable-next-line unicorn/no-null
       setMarkedView([null, null]);
     },
-    [state]
+    [onViewSet, state]
   );
 
   return (
@@ -130,13 +132,31 @@ export interface JumpButtonProps {
 }
 
 export default function JumpButton({ className }: JumpButtonProps) {
+  // Commit to history when the calendar is closed and the view was set.
+  const state = usePlayerState();
+  const wasViewSet = useRef(false);
+  const onViewSet = useCallback(() => {
+    wasViewSet.current = true;
+  }, []);
+  const onOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        wasViewSet.current = false;
+        return;
+      }
+      if (!wasViewSet.current) return;
+      wasViewSet.current = false;
+      state.commitToHistory();
+    },
+    [state]
+  );
   return (
-    <Popover>
+    <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <IconButton icon={faCalendarDay} title="Jump to date" square className={className} />
       </PopoverTrigger>
       <PopoverContent className="w-auto" side="top">
-        <JumpCalendar />
+        <JumpCalendar onViewSet={onViewSet} />
       </PopoverContent>
     </Popover>
   );

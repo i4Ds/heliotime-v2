@@ -44,7 +44,14 @@ export default function ChartHeader() {
           <AboutLink className="text-2xl block sm:hidden" />
           <DynamicShareButton
             className="btn-tiny"
-            data={() => ({ url: globalThis.location.href, title: 'Heliotime' })}
+            data={async () => {
+              state.commitToHistory();
+              // Wait for the history to be committed (default throttle is 50ms)
+              await new Promise((r) => {
+                setTimeout(r, 60);
+              });
+              return { url: globalThis.location.href, title: 'Heliotime' };
+            }}
             title="Share view"
           />
           <DynamicSettingsButton className="btn-tiny" />
@@ -69,8 +76,10 @@ export default function ChartHeader() {
               const newIsFollowing = !settings.isFollowing;
               changeSettings({ isFollowing: newIsFollowing });
               const view = state.view();
-              if (newIsFollowing && view[1] < state.range()[1])
+              if (newIsFollowing && view[1] < state.range()[1]) {
                 state.setFollowView(view[1] - view[0]);
+                state.commitToHistory();
+              }
             }}
             title="Follow live"
           />

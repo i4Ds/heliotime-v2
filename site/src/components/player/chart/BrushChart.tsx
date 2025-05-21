@@ -103,7 +103,7 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
   const onBrushStart = useCallback(
     (isDrawingNew: boolean) => {
       if (!isDrawingNew) return;
-      state.setView(state.view(), true);
+      state.setView(state.view());
     },
     [state]
   );
@@ -116,6 +116,9 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
       ),
     [state, timeScale, range]
   );
+  const onBrushEnd = useCallback(() => {
+    state.commitToHistory();
+  }, [state]);
 
   return (
     <svg width={width} height={height} y={top} x={left} className="overflow-visible">
@@ -144,6 +147,7 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
         clickViewSize={30}
         onBrushStart={onBrushStart}
         onBrush={onBrush}
+        onBrushEnd={onBrushEnd}
       />
 
       {/* Axis */}

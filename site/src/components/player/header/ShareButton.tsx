@@ -10,7 +10,7 @@ const PopoverAnchor = lazyPopover('PopoverAnchor');
 const PopoverContent = lazyPopover('PopoverContent');
 
 export interface ShareButtonProps {
-  data: () => ShareData;
+  data: () => Promise<ShareData>;
   className?: string;
   title: string;
 }
@@ -22,7 +22,7 @@ export default function ShareButton({ data: getData, className, title }: ShareBu
 
   const handleShare = async () => {
     if (copyUrl !== undefined) return;
-    const data = getData();
+    const data = await getData();
     try {
       await navigator.share(data);
     } catch {

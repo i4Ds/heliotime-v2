@@ -2,10 +2,10 @@ import { fluxRangeQueryOptions } from '@/api/flux/useFluxRange';
 import { limitView, panView } from '@/utils/panZoom';
 import { NumberRange } from '@/utils/range';
 import { useInterval } from '@/utils/useInterval';
-import { useVolatileState, useVolatileSynced } from '@/utils/useVolatile';
+import { useVolatileState } from '@/utils/useVolatile';
 import { useQuery } from '@tanstack/react-query';
-import { createParser, parseAsIsoDateTime, useQueryStates } from 'nuqs';
-import { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
+import { createParser, HistoryOptions, parseAsIsoDateTime, useQueryStates } from 'nuqs';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { expFloor } from '@/utils/math';
 import {
   FOLLOW_FRONTRUN_PERCENT,
@@ -25,11 +25,12 @@ export interface HelioPlayerRenderState {
 
 export interface HelioPlayerState {
   timestamp(): Timestamp;
-  setTimestamp(timestamp: Timestamp, firstMajorChange?: boolean): void;
+  setTimestamp(timestamp: Timestamp): void;
   view(): View;
-  setView(view: View, firstMajorChange?: boolean): void;
+  setView(view: View): void;
   setFollowView(viewSize: number): void;
   range(): View;
+  commitToHistory(): void;
 }
 
 const DEFAULT_VIEW_SIZE_MS = 24 * 60 * 60 * 1000;
@@ -47,6 +48,7 @@ export const HelioPlayerStateContext = createContext<HelioPlayerState>({
   setView: () => {},
   setFollowView: () => {},
   range: () => DEFAULT_STATE.range,
+  commitToHistory: () => {},
 });
 
 export const usePlayerRenderState = () => useContext(HelioPlayerRenderStateContext);
@@ -70,6 +72,15 @@ export const parseAsIsoTimestamp = createParser<Timestamp>({
   serialize: (timestamp) => parseAsIsoDateTime.serialize(new Date(timestamp)),
 });
 
+function useSyncOnChange<Value>(syncValue: Value, setter: (value: Value) => void) {
+  const lastValue = useRef(syncValue);
+  useEffect(() => {
+    if (lastValue.current === syncValue) return;
+    lastValue.current = syncValue;
+    setter(syncValue);
+  }, [lastValue, setter, syncValue]);
+}
+
 const SEARCH_PARAMS = {
   date: parseAsIsoTimestamp.withDefault(DEFAULT_STATE.timestamp),
   view: parseAsView.withDefault(DEFAULT_STATE.view),
@@ -82,28 +93,26 @@ interface HelioPlayerStateProviderProps {
 
 export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerStateProviderProps) {
   const [settings, changeSettings] = usePlayerSettings();
-  const [{ date: renderTimestamp, view: renderView }, setQueryState] = useQueryStates(
-    SEARCH_PARAMS,
-    { throttleMs: 500 }
-  );
+  const [{ date: historyTimestamp, view: historyView }, setQueryState] =
+    useQueryStates(SEARCH_PARAMS);
   const [renderRange, getRange, setRange] = useVolatileState(DEFAULT_STATE.range);
 
   // Timestamp state
-  const [getTimestamp, setInternalTimestamp] = useVolatileSynced(renderTimestamp);
+  const [renderTimestamp, getTimestamp, setInternalTimestamp] = useVolatileState(historyTimestamp);
   const setTimestamp = useCallback(
-    (rawTimestamp: Timestamp, firstMajor = false) => {
+    (rawTimestamp: Timestamp) => {
       const range = getRange();
       const timestamp = Math.min(Math.max(rawTimestamp, range[0]), range[1]);
       setInternalTimestamp(timestamp);
-      setQueryState({ date: Math.round(timestamp) }, { history: firstMajor ? 'push' : 'replace' });
     },
-    [getRange, setInternalTimestamp, setQueryState]
+    [getRange, setInternalTimestamp]
   );
+  useSyncOnChange(historyTimestamp, setTimestamp);
 
   // View state
-  const [getView, setInternalView] = useVolatileSynced(renderView);
+  const [renderView, getView, setInternalView] = useVolatileState(historyView);
   const setView = useCallback(
-    (rawView: View, firstMajor = false) => {
+    (rawView: View) => {
       const range = getRange();
       const overflow = Math.min(rawView[1] - rawView[0], range[1] - range[0]) * 0.9;
       const newView = limitView(
@@ -119,19 +128,25 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
       if (oldView[1] < range[1] && newView[1] > range[1]) changeSettings({ isFollowing: true });
 
       setInternalView(newView);
-      setQueryState(
-        { view: [Math.round(newView[0]), Math.round(newView[1])] },
-        { history: firstMajor ? 'push' : 'replace' }
-      );
     },
-    [changeSettings, getRange, getView, setInternalView, setQueryState]
+    [changeSettings, getRange, getView, setInternalView]
   );
+  useSyncOnChange(historyView, setView);
   const setFollowView = useCallback(
-    (viewSize: number, firstMajor = true) => {
+    (viewSize: number) => {
       const frontrun = Date.now() + FOLLOW_FRONTRUN_PERCENT * viewSize;
-      setView([frontrun - viewSize, frontrun], firstMajor);
+      setView([frontrun - viewSize, frontrun]);
     },
     [setView]
+  );
+
+  const commitToHistory = useCallback(
+    (history: HistoryOptions = 'push') => {
+      setQueryState({ date: Math.round(getTimestamp()) }, { history });
+      const view = getView();
+      setQueryState({ view: [Math.round(view[0]), Math.round(view[1])] }, { history });
+    },
+    [getTimestamp, getView, setQueryState]
   );
 
   // Initialize state
@@ -144,7 +159,8 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
     if (getTimestamp() === DEFAULT_STATE.timestamp)
       setTimestamp(isViewDefault ? now : (getView()[0] + getView()[1]) / 2);
     // Set to last day by default.
-    if (isViewDefault) setFollowView(24 * 60 * 60 * 1000, false);
+    if (isViewDefault) setFollowView(24 * 60 * 60 * 1000);
+    commitToHistory('replace');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -169,7 +185,7 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
   useEffect(() => {
     if (dataRange === undefined) return;
     setRange([dataRange[0], Date.now()]);
-    // Reapply limits to view incase range got smaller
+    // Reapply limits to view in case range got smaller
     setView(getView());
   }, [dataRange, getRange, getView, setView, setRange]);
 
@@ -189,8 +205,9 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
       setView,
       setFollowView,
       range: getRange,
+      commitToHistory,
     }),
-    [getRange, getTimestamp, getView, setFollowView, setTimestamp, setView]
+    [commitToHistory, getRange, getTimestamp, getView, setFollowView, setTimestamp, setView]
   );
 
   return (

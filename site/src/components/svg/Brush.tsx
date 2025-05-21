@@ -106,7 +106,7 @@ export default function Brush({
   minSize: rawMinSize = 0,
   allowOverflow = false,
   clickViewSize,
-  pointerFilter = () => true,
+  pointerFilter = (event) => event.button === 0,
   onBrushStart = () => {},
   onBrush,
   onBrushEnd = () => {},
