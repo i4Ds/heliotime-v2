@@ -39,8 +39,7 @@
     "d3-array": "^3.2.4",
     "d3-interpolate": "^3.0.1",
     "d3-scale": "^4.0.2",
-    "mdx": "^0.3.1",
-    "next": "15.0.3",
+    "next": "^15.0.3",
     "nuqs": "^2.1.2",
     "react": "^18.3.1",
     "react-calendar": "^5.1.0",
@@ -51,7 +50,7 @@
     "use-debounce": "^10.0.1"
   },
   "devDependencies": {
-    "@next/bundle-analyzer": "15.0.3",
+    "@next/bundle-analyzer": "^15.0.3",
     "@tailwindcss/typography": "^0.5.15",
     "@tanstack/eslint-plugin-query": "^5.47.0",
     "@types/mdx": "^2.0.13",
@@ -76,9 +75,11 @@
     "postcss": "^8.4.49",
     "prettier": "^3.3.2",
     "tailwindcss": "^3.4.1",
-    "typescript": "~5.5.4"
+    "typescript": "^5.5.4"
   },
   "resolutions": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "@visx/annotation": "file:./visx/packages/visx-annotation",
     "@visx/axis": "file:./visx/packages/visx-axis",
     "@visx/bounds": "file:./visx/packages/visx-bounds",

@@ -3,7 +3,7 @@ import { DialogTitle } from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faClose } from '@fortawesome/free-solid-svg-icons';
-import { MDXComponents } from 'mdx/types';
+import type { MDXComponents } from 'mdx/types';
 import { useRouter } from 'next/navigation';
 import AboutContent from './about.md';
 
