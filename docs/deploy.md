@@ -8,6 +8,10 @@ First provide the necessary [configuration](../README.md#configuration), for exa
 DATABASE_PASSWORD=<password>
 IMPORT_START=1980-01-01
 NEXT_PUBLIC_API_URL=https://example.org/api
+
+# Optimize database for 10 GB of memory
+DATABASE_MEMORY_GB=10
+DATABASE_ARGS="-c shared_buffers=3GB -c max_wal_size=3GB"
 ```
 
 Then deploy everything:

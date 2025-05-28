@@ -1,6 +1,7 @@
 services:
   db:
     image: timescale/timescaledb:2.18.1-pg16
+    command: ${DATABASE_ARGS:-}
     restart: unless-stopped
     healthcheck:
       # Do not use pg_isready because it throws errors

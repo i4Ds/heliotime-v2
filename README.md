@@ -58,6 +58,7 @@ The Docker Compose deployment, site, and server can be configured using the foll
 |         `DATABASE_PASSWORD`         |       `heliotime`       |      -       | Password to authenticate with the database.                                                   |
 |        `DATABASE_POOL_SIZE`         |          `10`           |     same     | Amount of database connections a single worker has available.                                 |
 |        `DATABASE_MEMORY_GB`         |          `28`           |     same     | GB of memory available to the database. Used by migrations to optimize chunk and cache sizes. |
+|           `DATABASE_ARGS`           |            -            |     same     | Arguments to Postgres for configuration like `-c shared_buffers=2GB`.                         |
 |           `IMPORT_START`            |      now - 30 days      |     same     | From when to import data in ISO format.                                                       |
 |        `FLUX_MAX_RESOLUTION`        |         `2000`          |     same     | Max flux resolution allowed to be requested. Bigger request will be downsized.                |
 |        `FLUX_QUERY_TIMEOUT`         |          `30`           |     same     | Timeout of flux database queries before giving up.                                            |
