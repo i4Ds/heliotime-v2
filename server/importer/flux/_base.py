@@ -9,7 +9,7 @@ from typing import Callable, Coroutine, Any
 import asyncpg
 
 from config import IMPORT_START
-from data.flux.access import fetch_last_flux_timestamp
+from data.flux.access import fetch_last_non_combined_flux_timestamp
 from data.flux.spec.channel import FluxChannel
 from data.flux.spec.data import Flux
 from data.flux.spec.source import FluxSource
@@ -59,7 +59,7 @@ class Importer(ABC):
 
     async def start_import(self):
         while True:
-            last_timestamp = await fetch_last_flux_timestamp(self._connection, self.source)
+            last_timestamp = await fetch_last_non_combined_flux_timestamp(self._connection, self.source)
             start = IMPORT_START if last_timestamp is None else \
                 last_timestamp + timedelta(milliseconds=1)
             self._logger.info(f'Start import from {start}')

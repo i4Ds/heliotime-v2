@@ -6,7 +6,7 @@ from typing import Optional, Awaitable, Callable, cast
 import pandas as pd
 from asyncpg import Connection, Pool
 
-from data.flux.spec.channel import FluxChannel
+from data.flux.spec.channel import FluxChannel, SATELLITE_COMBINED_ID
 from data.flux.spec.data import empty_flux, FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, RawFlux
 from data.flux.spec.source import FluxSource
 from utils.range import DateTimeRange
@@ -183,12 +183,20 @@ async def fetch_flux_timestamp_range(
     return None if start is None else (start, end)
 
 
-async def fetch_last_flux_timestamp(connection: Connection | Pool, source: FluxSource) -> Optional[datetime]:
+async def fetch_last_non_combined_flux_timestamp(
+        connection: Connection | Pool, source: FluxSource
+) -> Optional[datetime]:
     """
+    Only queries non-combined flux measurements to ignore old combined measurements
+    from older server versions.
+
     Can be extremely slow if there are a lot of chunks.
     See: https://github.com/timescale/timescaledb/issues/5102
     """
-    return await connection.fetchval(f'SELECT MAX(time) FROM {source.table_name}')
+    return await connection.fetchval(
+        f'SELECT MAX(time) FROM {source.table_name} ' +
+        f'WHERE satellite != {SATELLITE_COMBINED_ID}'
+    )
 
 
 async def fetch_available_channels(
