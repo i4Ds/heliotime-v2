@@ -5,6 +5,8 @@ export interface HelioPlayerSettings {
   readonly isFollowing: boolean;
   readonly lockWattAxis: boolean;
   readonly showPreview: boolean;
+  readonly showOverview: boolean;
+  readonly linearOverview: boolean;
 }
 
 // Hardcoded settings
@@ -16,6 +18,8 @@ const DEFAULT_SETTINGS: HelioPlayerSettings = {
   isFollowing: true,
   lockWattAxis: true,
   showPreview: true,
+  showOverview: true,
+  linearOverview: false,
 };
 
 export type HelioPlayerSettingsChanger = (change: Partial<HelioPlayerSettings>) => void;
@@ -32,8 +36,10 @@ export const HelioPlayerSettingsContext = createContext<HelioPlayerSettingsUse>(
 export const usePlayerSettings = () => useContext(HelioPlayerSettingsContext);
 
 const SEARCH_PARAMS = {
-  lockWattAxis: parseAsBoolean.withDefault(true),
-  showPreview: parseAsBoolean.withDefault(true),
+  lockWattAxis: parseAsBoolean.withDefault(DEFAULT_SETTINGS.lockWattAxis),
+  showPreview: parseAsBoolean.withDefault(DEFAULT_SETTINGS.showPreview),
+  showOverview: parseAsBoolean.withDefault(DEFAULT_SETTINGS.showOverview),
+  linearOverview: parseAsBoolean.withDefault(DEFAULT_SETTINGS.linearOverview),
 } as const;
 
 function isChangeRedundant(settings: HelioPlayerSettings, change: Partial<HelioPlayerSettings>) {

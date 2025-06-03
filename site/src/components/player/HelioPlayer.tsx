@@ -32,15 +32,25 @@ function MaybeHelioView() {
   );
 }
 
+function Chart({ width, height }: { width: number; height: number }) {
+  const [settings] = usePlayerSettings();
+  const showBrush = height > 300 && settings.showOverview;
+  const brushHeight = height * 0.15;
+
+  return (
+    <svg width={width} height={height} className="overflow-visible absolute">
+      <MainChart width={width} height={height - (showBrush ? brushHeight + THEME.spacePx(2) : 0)} />
+      {showBrush && <BrushChart width={width} height={brushHeight} top={height - brushHeight} />}
+    </svg>
+  );
+}
+
 interface HelioPlayerProps {
   className?: string;
 }
 
 export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
   const { parentRef, width, height } = useParentSize();
-  const showBrush = height > 300;
-  const brushHeight = height * 0.15;
-
   return (
     <HelioPlayerSettingsProvider>
       <HelioPlayerStateProvider chartWidth={width}>
@@ -54,17 +64,7 @@ export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
               className="flex-grow select-none touch-none"
               onContextMenuCapture={(event) => event.preventDefault()}
             >
-              {width > 0 && height > 0 && (
-                <svg width={width} height={height} className="overflow-visible absolute">
-                  <MainChart
-                    width={width}
-                    height={height - (showBrush ? brushHeight + THEME.spacePx(2) : 0)}
-                  />
-                  {showBrush && (
-                    <BrushChart width={width} height={brushHeight} top={height - brushHeight} />
-                  )}
-                </svg>
-              )}
+              {width > 0 && height > 0 && <Chart width={width} height={height} />}
             </div>
           </div>
           <ToasterWithWelcome />

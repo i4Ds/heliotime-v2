@@ -1,5 +1,5 @@
 import { useStableDebouncedFlux } from '@/api/flux/useFlux';
-import { scaleLog, scaleUtc } from '@visx/scale';
+import { scaleLinear, scaleLog, scaleUtc } from '@visx/scale';
 import { useCallback, useMemo } from 'react';
 import { THEME } from '@/app/theme';
 import { PositionSizeProps } from '@/components/svg/base';
@@ -13,10 +13,11 @@ import {
   MemoAxisTop,
   MemoGridColumns,
   MemoLine,
+  wattExtent,
 } from './utils';
 import FluxLine from './FluxLine';
 import { usePlayerState, usePlayerRenderState } from '../state/state';
-import { MIN_VIEW_SIZE_MS } from '../state/settings';
+import { MIN_VIEW_SIZE_MS, usePlayerSettings } from '../state/settings';
 
 const AXIS_LABEL_PROPS = {
   ...THEME.textSize.xs,
@@ -24,7 +25,7 @@ const AXIS_LABEL_PROPS = {
   fill: THEME.colors.text.DEFAULT,
   filter: 'url(#label-backdrop)',
 };
-const CHART_Y_PADDING = 2;
+const CHART_Y_PADDING = 6;
 const BACKDROP_PADDING = 0.15;
 const BACKDROP_BLUR_RADIUS = 0.2;
 
@@ -72,6 +73,7 @@ function LabelBackdropFilter() {
 const MemoLabelBackdropFilter = React.memo(LabelBackdropFilter);
 
 export default function BrushChart({ width, height, top, left }: PositionSizeProps) {
+  const [settings] = usePlayerSettings();
   const state = usePlayerState();
   const { range, view, timestamp } = usePlayerRenderState();
   const data = useStableDebouncedFlux(range[0], range[1], width);
@@ -86,12 +88,12 @@ export default function BrushChart({ width, height, top, left }: PositionSizePro
   );
   const wattScale = useMemo(
     () =>
-      scaleLog({
+      (settings.linearOverview ? scaleLinear : scaleLog)({
         range: [height - 2 * CHART_Y_PADDING, CHART_Y_PADDING],
-        domain: MAX_WATT_EXTENT,
+        domain: wattExtent(data.flat()) ?? MAX_WATT_EXTENT,
         clamp: true,
       }),
-    [height]
+    [data, height, settings.linearOverview]
   );
 
   const timeTicks = calcTimeTicks(width);

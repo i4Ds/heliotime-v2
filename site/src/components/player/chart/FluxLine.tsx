@@ -1,13 +1,13 @@
 import { FluxSections } from '@/api/flux/data';
 import { curveMonotoneX } from '@visx/curve';
-import { ScaleLogarithmic, ScaleTime } from 'd3-scale';
+import { ScaleLogarithmic, ScaleTime, ScaleLinear } from 'd3-scale';
 import { LinePath } from '@visx/shape';
 import { memo } from 'react';
 
 export interface FluxLineProps {
   data: FluxSections;
   timeScale: ScaleTime<number, number>;
-  wattScale: ScaleLogarithmic<number, number>;
+  wattScale: ScaleLogarithmic<number, number> | ScaleLinear<number, number>;
 }
 
 // eslint-disable-next-line prefer-arrow-callback

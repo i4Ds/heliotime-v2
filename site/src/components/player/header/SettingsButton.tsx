@@ -40,6 +40,22 @@ export default function SettingsButton({ className = '' }: SettingsButtonProps) 
             />
             <label htmlFor="show-preview">Show sun preview</label>
           </div>
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="show-overview"
+              checked={settings.showOverview}
+              onCheckedChange={(value) => changeSettings({ showOverview: value })}
+            />
+            <label htmlFor="show-overview">Show overview</label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="linear-overview"
+              checked={settings.linearOverview}
+              onCheckedChange={(value) => changeSettings({ linearOverview: value })}
+            />
+            <label htmlFor="linear-overview">Linear overview</label>
+          </div>
         </PopoverContent>
       </Popover>
     </Suspense>
