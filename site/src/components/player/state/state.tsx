@@ -96,6 +96,12 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
   const [{ date: historyTimestamp, view: historyView }, setQueryState] =
     useQueryStates(SEARCH_PARAMS);
   const [renderRange, getRange, setRange] = useVolatileState(DEFAULT_STATE.range);
+  useEffect(() => {
+    if (getRange() !== DEFAULT_STATE.range) return;
+    // Immediately set to max range if not yet loaded because
+    // other code uses it as a limit. (GOES-1 was launched in 1975)
+    setRange([0, Date.now()]);
+  }, [getRange, setRange]);
 
   // Timestamp state
   const [renderTimestamp, getTimestamp, setInternalTimestamp] = useVolatileState(historyTimestamp);
@@ -152,12 +158,9 @@ export function HelioPlayerStateProvider({ chartWidth, children }: HelioPlayerSt
   // Initialize state
   // Must be within an useEffect to avoid SSR mismatches.
   useEffect(() => {
-    const now = Date.now();
-    // Set to max range if not yet loaded. (GOES-1 was launched in 1975)
-    if (getRange() === DEFAULT_STATE.range) setRange([0, now]);
     const isViewDefault = getView() === DEFAULT_STATE.view;
     if (getTimestamp() === DEFAULT_STATE.timestamp)
-      setTimestamp(isViewDefault ? now : (getView()[0] + getView()[1]) / 2);
+      setTimestamp(isViewDefault ? Date.now() : (getView()[0] + getView()[1]) / 2);
     // Set to last day by default.
     if (isViewDefault) setFollowView(24 * 60 * 60 * 1000);
     commitToHistory('replace');
