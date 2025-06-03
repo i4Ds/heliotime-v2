@@ -38,10 +38,15 @@ def _start_import():
         apply_db_migrations()
     archive_importer = ArchiveImporterProcess()
     live_importer = LiveImporterProcess()
-    archive_importer.start()
-    live_importer.start()
-    archive_importer.join()
-    live_importer.join()
+    try:
+        archive_importer.start()
+        live_importer.start()
+        archive_importer.join()
+        live_importer.join()
+    except KeyboardInterrupt:
+        archive_importer.kill()
+        live_importer.kill()
+        raise
 
 
 if __name__ == "__main__":

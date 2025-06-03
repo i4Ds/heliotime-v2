@@ -105,6 +105,5 @@ class ImporterProcess(Process, ABC):
         super().__init__(
             name=f'Heliotime {_PROCESS_NAMES[source]} Importer',
             target=_start_async,
-            args=(source, start),
-            daemon=True
+            args=(source, start)
         )
