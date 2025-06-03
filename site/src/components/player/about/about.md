@@ -36,7 +36,7 @@ raw, unprocessed data isn't currently supported.
 
 ## Helioviewer Integration
 
-The [Helioviewer](https://helioviewer.org/) preview shows 171 Ångstrom images of the Sun, sourced from:
+The [Helioviewer](https://helioviewer.ias.u-psud.fr/) preview shows 171 Ångstrom images of the Sun, sourced from:
 
 - **SDO (Solar Dynamics Observatory):** From June 2010 to now.
 - **SOHO (Solar and Heliospheric Observatory):** From January 1996 to June 2010.

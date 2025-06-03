@@ -18,7 +18,7 @@ export default withMdx(
       remotePatterns: [
         {
           protocol: 'https',
-          hostname: 'api.helioviewer.org',
+          hostname: 'helioviewer-api.ias.u-psud.fr',
           port: '',
           pathname: '/v2/takeScreenshot/',
         },
@@ -27,7 +27,7 @@ export default withMdx(
     rewrites: () => [
       {
         source: '/helioviewer/v2/getClosestImage',
-        destination: 'https://api.helioviewer.org/v2/getClosestImage/',
+        destination: 'https://helioviewer-api.ias.u-psud.fr/v2/getClosestImage/',
       },
     ],
   })

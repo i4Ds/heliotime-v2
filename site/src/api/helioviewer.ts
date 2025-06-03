@@ -1,8 +1,8 @@
 import { resRound } from '@/utils/math';
 import { useQuery } from '@tanstack/react-query';
 
-const VIEWER_URL = 'https://helioviewer.org/';
-const API_URL = 'https://api.helioviewer.org/';
+const VIEWER_URL = 'https://helioviewer.ias.u-psud.fr/';
+const API_URL = 'https://helioviewer-api.ias.u-psud.fr/';
 // As the API is not CORS-enabled, we need to proxy the requests.
 // Individual paths are specified in the Next.js config.
 const API_PROXY_URL = '/helioviewer/';
