@@ -1,8 +1,8 @@
 import asyncio
 import multiprocessing
+import multiprocessing.pool
 import warnings
 from collections import deque
-from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import timedelta, datetime, timezone, time, date
 from logging import Logger
@@ -96,8 +96,7 @@ async def _download_results(executor: ThreadPoolExecutor, logger: Logger, result
             wait = _DOWNLOAD_BACKOFF * (i_try + 1)
             logger.warning(
                 f'Download of {len(files.errors)} files failed (of {len(results)}, try {i_try + 1}). '
-                f'Retrying in {wait}',
-                files.errors
+                f'Retrying in {wait}. Errors: {files.errors}'
             )
             await asyncio.sleep(wait.total_seconds())
         else:
@@ -260,8 +259,6 @@ class ArchiveImporter(Importer):
     - https://data.ngdc.noaa.gov/platforms/solar-space-observing-satellites/goes/goes16/l2/docs/GOES-R_XRS_L2_Data_Users_Guide.pdf
     """
 
-    _process_executor: ProcessPoolExecutor | None
-    _manager: SyncManager | None
     _db_pool_factory: DbPoolFactory
 
     def __init__(
@@ -269,94 +266,90 @@ class ArchiveImporter(Importer):
             db_pool_factory: DbPoolFactory,
     ):
         super().__init__(FluxSource.ARCHIVE, connection)
-        self._process_executor = None
-        self._manager = None
         self._db_pool_factory = db_pool_factory
-
-    def __enter__(self):
-        self._manager = SyncManager()
-        self._manager.start()
-        self._process_executor = ProcessPoolExecutor(
-            _WORKER_COUNT,
-            # Mitigate any potential memory leaks
-            max_tasks_per_child=1,
-            initializer=configure_logging
-        )
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._process_executor:
-            self._process_executor.shutdown(wait=True)
-        if self._manager:
-            self._manager.shutdown()
 
     async def _import_from(self, start: datetime) -> timedelta:
         """
         Import from the archive as efficiently as possible.
         """
-        if not self._manager or not self._process_executor:
-            raise RuntimeError("ArchiveImporter must be used as a context manager.")
-
-        now = datetime.now(timezone.utc)
-        days = pd.date_range(start.date(), date.today(), freq='D')
-
-        # Create events for the first batch
-        search_event = self._manager.Event()
-        download_event = self._manager.Event()
-        process_event = self._manager.Event()
-        import_event = self._manager.Event()
-        search_event.set()
-        download_event.set()
-        process_event.set()
-        import_event.set()
-
-        # Submit all batches
-        futures = deque()
-        for start_date in days[::_BATCH_SIZE_DAYS]:
-            start_datetime = datetime.combine(start_date, time(), timezone.utc)
-            time_range = DateTimeRange(
-                max(start, start_datetime),
-                min(start_datetime + timedelta(days=_BATCH_SIZE_DAYS), now)
-            )
-
-            # Create events for the next batch
-            next_search_event = self._manager.Event()
-            next_download_event = self._manager.Event()
-            next_process_event = self._manager.Event()
-            next_import_event = self._manager.Event()
-
-            # Submit this batch
-            futures.append(self._process_executor.submit(
-                _process_import_files,
-                self._logger, self.source, time_range,
-                search_event, next_search_event,
-                download_event, next_download_event,
-                process_event, next_process_event,
-                import_event, next_import_event,
-                self._db_pool_factory
-            ))
-
-            # Replace events for next batch
-            search_event = next_search_event
-            download_event = next_download_event
-            process_event = next_process_event
-            import_event = next_import_event
-
-        # Wait for all batches to finish
+        # Pool needs to be per call to allow pool termination on error.
+        pool = multiprocessing.pool.Pool(
+            _WORKER_COUNT,
+            initializer=configure_logging,
+            maxtasksperchild=1
+        )
+        manager = SyncManager()
+        manager.start()
         try:
-            for future in futures:
-                future.result()
-        except:  # noqa
-            for future in futures:
-                future.cancel()
-            raise
+            now = datetime.now(timezone.utc)
+            days = pd.date_range(start.date(), date.today(), freq='D')
+
+            # Create events for the first batch
+            search_event = manager.Event()
+            download_event = manager.Event()
+            process_event = manager.Event()
+            import_event = manager.Event()
+            search_event.set()
+            download_event.set()
+            process_event.set()
+            import_event.set()
+            # Hold all events to prevent their garbage collection.
+            # Pool does not keep references to events of pending tasks.
+            events = deque((search_event, download_event, process_event, import_event))
+
+            # Submit all batches
+            async_results = deque()
+            for start_date in days[::_BATCH_SIZE_DAYS]:
+                start_datetime = datetime.combine(start_date, time(), timezone.utc)
+                time_range = DateTimeRange(
+                    max(start, start_datetime),
+                    min(start_datetime + timedelta(days=_BATCH_SIZE_DAYS), now)
+                )
+
+                # Create events for the next batch
+                next_search_event = manager.Event()
+                next_download_event = manager.Event()
+                next_process_event = manager.Event()
+                next_import_event = manager.Event()
+                events.extend((search_event, download_event, process_event, import_event))
+
+                # Submit this batch
+                async_results.append(pool.apply_async(
+                    _process_import_files,
+                    args=(
+                        self._logger, self.source, time_range,
+                        search_event, next_search_event,
+                        download_event, next_download_event,
+                        process_event, next_process_event,
+                        import_event, next_import_event,
+                        self._db_pool_factory
+                    )
+                ))
+
+                # Replace events for next batch
+                search_event = next_search_event
+                download_event = next_download_event
+                process_event = next_process_event
+                import_event = next_import_event
+
+            # Wait for all batches to finish
+            try:
+                for res in async_results:
+                    res.get()
+            except Exception as e:
+                pool.terminate()
+                raise
+        finally:
+            pool.close()
+            pool.join()
+            manager.shutdown()
         return timedelta(hours=1)
 
 
 async def start_archive_import():
     async with create_db_pool() as connection:
-        with ArchiveImporter(connection, create_db_pool) as importer:
-            await importer.start_import()
+        importer = ArchiveImporter(connection, create_db_pool)
+        await importer.start_import()
 
 
 class ArchiveImporterProcess(ImporterProcess):
