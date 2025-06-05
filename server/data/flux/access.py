@@ -105,6 +105,11 @@ async def import_flux(
     if len(channels) == 0:
         return
 
+    # Increase the tuple decompression limit per DML transaction
+    # to allow importing past data without hitting the default limit.
+    # 4 satellites x 2 bands x 2 clean states x 30 days in seconds ≃ 42 million tuples
+    await connection.execute("SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 100000000")
+
     async with connection.transaction():
         # Delete existing entries in the time range
         delete_conditions = deque()
