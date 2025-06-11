@@ -1,6 +1,8 @@
 # Heliotime ([heliotime.org](https://heliotime.org/))
 
-Interactive web viewer of [GOES X-ray Flux](https://www.swpc.noaa.gov/products/goes-x-ray-flux) data from 1980 to now. Lets you inspect specific solar flares, the different solar cycles, or any other time range of your choosing. Includes a preview of [Helioviewer](https://helioviewer.org/?imageLayers=[SDO%2CAIA%2CAIA%2C171%2C1%2C100]) when selecting a timestamp. See [heliotime.org](https://heliotime.org/) or the [screenshots](#screenshot).
+![screenshot](docs/screenshot.png)
+
+Interactive web viewer of [GOES X-ray Flux](https://www.swpc.noaa.gov/products/goes-x-ray-flux) data from 1980 to now. Lets you inspect specific solar flares, the different solar cycles, or any other time range of your choosing. Includes a preview of [Helioviewer](https://helioviewer.org/?imageLayers=[SDO%2CAIA%2CAIA%2C171%2C1%2C100]) when selecting a timestamp. Visit [heliotime.org](https://heliotime.org/) for a running version.
 
 ## Getting started
 
@@ -66,7 +68,3 @@ The Docker Compose deployment, site, and server can be configured using the foll
 |        `NEXT_PUBLIC_API_URL`        | `http://localhost:8000` |     same     | URL used by the browser to access the API.                                                    |
 
 Docker Compose automatically loads `.env` in the repository root and the site (Next.js) does the same for `site/.env.local` when running on the host.
-
-## Screenshot
-
-![screenshot](docs/screenshot.png)
