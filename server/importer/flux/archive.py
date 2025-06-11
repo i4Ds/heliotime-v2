@@ -118,7 +118,9 @@ def _from_timeseries(df: pd.DataFrame, band: FrequencyBand) -> Flux:
 
     # Format data into a Flux series
     index = df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
-    return df.set_index(index)[name].rename(FLUX_VALUE_NAME).dropna()
+    return df[name] \
+        .set_axis(index)[~index.duplicated()] \
+        .rename(FLUX_VALUE_NAME).dropna()
 
 
 def _load_channels(satellite: int, time_range: DateTimeRange, files: Results) -> dict[FluxChannel, Flux]:
