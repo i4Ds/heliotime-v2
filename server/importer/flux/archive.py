@@ -148,10 +148,8 @@ async def _process_import_async(
         search_event: multiprocessing.Event,
         last_download_event: multiprocessing.Event,
         download_event: multiprocessing.Event,
-        last_process_event: multiprocessing.Event,
-        process_event: multiprocessing.Event,
-        last_import_event: multiprocessing.Event,
-        import_event: multiprocessing.Event,
+        last_database_event: multiprocessing.Event,
+        database_event: multiprocessing.Event,
         db_pool_factory: DbPoolFactory,
 ):
     # Search for files
@@ -197,20 +195,19 @@ async def _process_import_async(
         for channel_dict in await asyncio.gather(*channel_futures):
             channels.update(channel_dict)
 
+    # Processing uses data from the previous import, so must wait for it to finish.
+    last_database_event.wait()
     async with db_pool_factory() as pool:
         # Process the channels
-        last_process_event.wait()
         with log_time(logger, f'Prepare {time_range}'):
             channels = await prepare_flux_channels(executor, pool, source, channels, time_range)
-        process_event.set()
 
         # Import the channels
-        last_import_event.wait()
         log_import(logger, channels)
         with log_time(logger, f'Import {time_range}'):
             async with pool.acquire() as connection:
                 await import_flux(connection, source, channels)
-        import_event.set()
+    database_event.set()
 
     # Delete the used files
     with log_time(logger, f'Cleanup {time_range}'):
@@ -228,10 +225,8 @@ def _process_import_files(
         search_event: multiprocessing.Event,
         last_download_event: multiprocessing.Event,
         download_event: multiprocessing.Event,
-        last_process_event: multiprocessing.Event,
-        process_event: multiprocessing.Event,
-        last_import_event: multiprocessing.Event,
-        import_event: multiprocessing.Event,
+        last_database_event: multiprocessing.Event,
+        database_event: multiprocessing.Event,
         db_pool_factory: DbPoolFactory,
 ):
     with ThreadPoolExecutor() as executor:
@@ -239,16 +234,14 @@ def _process_import_files(
             logger, executor, source, time_range,
             last_search_event, search_event,
             last_download_event, download_event,
-            last_process_event, process_event,
-            last_import_event, import_event,
+            last_database_event, database_event,
             db_pool_factory
         ))
     # Set all the events as done in case the function early returns.
     # If there was an exception, they shouldn't and won't be set.
     search_event.set()
     download_event.set()
-    process_event.set()
-    import_event.set()
+    database_event.set()
 
 
 class ArchiveImporter(Importer):
@@ -289,15 +282,13 @@ class ArchiveImporter(Importer):
             # Create events for the first batch
             search_event = manager.Event()
             download_event = manager.Event()
-            process_event = manager.Event()
-            import_event = manager.Event()
+            database_event = manager.Event()
             search_event.set()
             download_event.set()
-            process_event.set()
-            import_event.set()
+            database_event.set()
             # Hold all events to prevent their garbage collection.
             # Pool does not keep references to events of pending tasks.
-            events = deque((search_event, download_event, process_event, import_event))
+            events = deque((search_event, download_event, database_event))
 
             # Submit all batches
             async_results = deque()
@@ -311,9 +302,8 @@ class ArchiveImporter(Importer):
                 # Create events for the next batch
                 next_search_event = manager.Event()
                 next_download_event = manager.Event()
-                next_process_event = manager.Event()
-                next_import_event = manager.Event()
-                events.extend((search_event, download_event, process_event, import_event))
+                next_database_event = manager.Event()
+                events.extend((next_search_event, next_download_event, next_database_event))
 
                 # Submit this batch
                 async_results.append(pool.apply_async(
@@ -322,8 +312,7 @@ class ArchiveImporter(Importer):
                         self._logger, self.source, time_range,
                         search_event, next_search_event,
                         download_event, next_download_event,
-                        process_event, next_process_event,
-                        import_event, next_import_event,
+                        database_event, next_database_event,
                         self._db_pool_factory
                     )
                 ))
@@ -331,14 +320,13 @@ class ArchiveImporter(Importer):
                 # Replace events for next batch
                 search_event = next_search_event
                 download_event = next_download_event
-                process_event = next_process_event
-                import_event = next_import_event
+                database_event = next_database_event
 
             # Wait for all batches to finish
             try:
                 for res in async_results:
                     res.get()
-            except Exception as e:
+            except Exception:
                 pool.terminate()
                 raise
         finally:
