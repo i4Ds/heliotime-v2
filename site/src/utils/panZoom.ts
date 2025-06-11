@@ -43,7 +43,9 @@ export function wheelZoomView(
   focus = (view[0] + view[1]) / 2,
   minSize?: number
 ): Readonly<NumberRange> {
-  const zoomFactor = 1.1 ** (wheelDelta * -0.01);
+  // Clamp minimum because track pads send very small deltas
+  const delta = Math.sign(wheelDelta) * Math.max(Math.abs(wheelDelta), 20);
+  const zoomFactor = Math.exp(-delta * 0.001);
   return zoomView(view, zoomFactor, focus, minSize);
 }
 

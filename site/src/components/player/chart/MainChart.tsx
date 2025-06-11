@@ -16,6 +16,7 @@ import { useStableDebouncedFlux } from '@/api/flux/useFlux';
 import Brush, { BrushView } from '@/components/svg/Brush';
 import { applyMargin, PositionSizeProps } from '@/components/svg/base';
 import { TextRect } from '@/components/svg/TextRect';
+import { useEvent } from '@/utils/useEvent';
 import {
   calcTimeTicks,
   formatTimeCursor,
@@ -71,6 +72,7 @@ export function MainChart(props: PositionSizeProps) {
   const { view, timestamp } = usePlayerRenderState();
   const state = usePlayerState();
   const [settings] = usePlayerSettings();
+  const containerRef = useRef<SVGSVGElement>(null);
 
   const timeLabelOffset = 40;
   const wattLabelOffset = settings.lockWattAxis ? 40 : 70;
@@ -129,10 +131,14 @@ export function MainChart(props: PositionSizeProps) {
     };
   }, [hoverPoint, series, timeScale, wattScale]);
 
-  const handleWheel = useCallback(
-    (event: React.WheelEvent) => {
+  useEvent(
+    containerRef.current,
+    'wheel',
+    (event) => {
       const point = localPoint(event);
       if (point === null) return;
+      event.preventDefault();
+
       const zoomed = wheelZoomView(
         state.view(),
         event.deltaY,
@@ -140,14 +146,13 @@ export function MainChart(props: PositionSizeProps) {
         MIN_VIEW_SIZE_MS
       );
 
-      const panDelta = timeScale.invert(event.deltaX).getTime() - view[0];
+      const panDelta = timeScale.invert(event.deltaX * 0.5).getTime() - view[0];
       state.setView(panView(zoomed, panDelta));
     },
-    [state, timeScale, view]
+    false
   );
 
   // Handle drag & click interactions
-  const containerRef = useRef<SVGSVGElement>(null);
   const stack = useMemo(() => new PointerStack<Point | undefined>(2), []);
   const clickPointerId = useRef<number | undefined>(undefined);
   const handlePointerDown = useCallback(
@@ -241,7 +246,6 @@ export function MainChart(props: PositionSizeProps) {
       height={height}
       x={left}
       y={top}
-      onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerOver={handleHover}
       onPointerMove={handleHover}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { useEvent } from './useEvent';
 
 export type EventListener<EventType extends keyof WindowEventMap> = (
   event: WindowEventMap[EventType]
@@ -11,18 +12,16 @@ export type EventListener<EventType extends keyof WindowEventMap> = (
 export function useWindowEvent<EventType extends keyof WindowEventMap>(
   eventType: EventType,
   callback: EventListener<EventType>,
-  options?: AddEventListenerOptions
+  passive: boolean = true
 ) {
-  const savedCallback = useRef<EventListener<EventType>>(callback);
-  useEffect(() => {
-    savedCallback.current = callback;
-  }, [callback]);
-
-  useEffect(() => {
-    const listener = (event: WindowEventMap[EventType]) => savedCallback.current(event);
-    globalThis.addEventListener(eventType, listener, options);
-    return () => globalThis.removeEventListener(eventType, listener);
-  }, [eventType, options]);
+  useEvent(
+    // eslint-disable-next-line unicorn/prefer-global-this
+    typeof window === 'undefined' ? undefined : window,
+    // @ts-expect-error EventType is a key of WindowEventMap and should be valid.
+    eventType,
+    callback,
+    passive
+  );
 }
 
 interface Size {
