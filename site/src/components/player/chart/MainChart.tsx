@@ -65,7 +65,12 @@ function calcDistance(lastPointA: Point | undefined, lastPointB: Point | undefin
 }
 
 function shouldBrush(event: PointerEvent | React.PointerEvent): boolean {
-  return event.pointerType !== 'touch' && event.button === 2;
+  return (
+    // Left click on mouse
+    (event.pointerType !== 'touch' && event.button === 2) ||
+    // Normal touch with shift key
+    (event.shiftKey && event.button === 0)
+  );
 }
 
 export function MainChart(props: PositionSizeProps) {
