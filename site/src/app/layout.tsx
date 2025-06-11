@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { config } from '@fortawesome/fontawesome-svg-core';
 import '@fortawesome/fontawesome-svg-core/styles.css';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
@@ -18,6 +18,10 @@ export const metadata: Metadata = {
     // Prevent Dark Reader from inverting the page as it breaks the SVG diagrams.
     'darkreader-lock': '-',
   },
+};
+
+export const viewport: Viewport = {
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({
