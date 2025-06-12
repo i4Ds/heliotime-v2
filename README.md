@@ -4,6 +4,8 @@
 
 Interactive web viewer of [GOES X-ray Flux](https://www.swpc.noaa.gov/products/goes-x-ray-flux) data from 1980 to now. Lets you inspect specific solar flares, the different solar cycles, or any other time range of your choosing. Includes a preview of [Helioviewer](https://helioviewer.org/?imageLayers=[SDO%2CAIA%2CAIA%2C171%2C1%2C100]) when selecting a timestamp. Visit [heliotime.org](https://heliotime.org/) for a running version.
 
+**Notice:** The maintenance status of Heliotime is currently in limbo, as I (the main maintainer @tschai-yim) am leaving FHNW. This project will probably be continued once development resources become available again, at which point reading my [proposed changes](./docs/proposed-changes.md) might be useful for the new maintainer.
+
 ## Getting started
 
 First, this repository uses Git submodules, so ensure they are properly initialized:
