@@ -119,12 +119,32 @@ def _from_timeseries(df: pd.DataFrame, band: FrequencyBand) -> Flux:
     # Format data into a Flux series
     index = df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
     return df[name] \
-        .set_axis(index)[~index.duplicated()] \
+        .set_axis(index)[~index.duplicated()].sort_index() \
         .rename(FLUX_VALUE_NAME).dropna()
 
 
-def _load_channels(satellite: int, time_range: DateTimeRange, files: Results) -> dict[FluxChannel, Flux]:
-    timeseries = TimeSeries(files, concatenate=True).to_dataframe()
+def _load_channels(logger: Logger, satellite: int, time_range: DateTimeRange, files: Results) \
+        -> dict[FluxChannel, Flux]:
+    try:
+        timeseries = TimeSeries(files, concatenate=True).to_dataframe()
+    except Exception as e:
+        logger.error(
+            f'Failed to load all files from satellite {satellite} for {time_range}. Retrying individually: {e}')
+        sections = deque()
+        for file in files:
+            try:
+                sections.append(TimeSeries(file).to_dataframe())
+            except Exception as e2:
+                logger.error(f'Failed to load file {file} for satellite {satellite} for {time_range}: {e2}')
+        if len(sections) == 0:
+            logger.warning(f'No files could be loaded from satellite {satellite} for {time_range}. Skipping import.')
+            return {}
+        if len(sections) != len(files):
+            logger.warning(
+                f'Failed to load {len(files) - len(sections)}/{len(files)} files '
+                f'from satellite {satellite} for {time_range}. Skipping files and continuing import.')
+        timeseries = pd.concat(sections)
+
     channels: dict[FluxChannel, Flux] = {}
     for band in (FrequencyBand.SHORT, FrequencyBand.LONG):
         if timeseries is None:
@@ -180,7 +200,9 @@ async def _process_import_async(
                 await asyncio.sleep(5)
             async with download_semaphore:
                 files = await _download_results(executor, logger, results)
-            channel_futures.append(run_in_executor(executor, _load_channels, satellite, time_range, files))
+            channel_futures.append(
+                run_in_executor(executor, _load_channels, logger, satellite, time_range, files)
+            )
             used_files.extend(files)
 
         await asyncio.wait((
