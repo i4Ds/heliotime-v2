@@ -1,3 +1,4 @@
+from datetime import timezone
 from typing import Iterable
 
 import numpy as np
@@ -26,7 +27,7 @@ def empty_flux() -> Flux:
     return pd.Series(
         name=FLUX_VALUE_NAME,
         dtype=np.float32,
-        index=pd.DatetimeIndex((), name=FLUX_INDEX_NAME),
+        index=pd.DatetimeIndex((), name=FLUX_INDEX_NAME, tz=timezone.utc),
     )
 
 
@@ -35,7 +36,7 @@ def empty_aggregated_flux() -> AggregatedFlux:
     Creates an empty aggregated flux dataframe with the correct column names and types.
     """
     return pd.DataFrame(
-        index=pd.DatetimeIndex((), name=FLUX_INDEX_NAME),
+        index=pd.DatetimeIndex((), name=FLUX_INDEX_NAME, tz=timezone.utc),
         columns=(
             pd.Series(name=FLUX_MIN_NAME, dtype=np.float32),
             pd.Series(name=FLUX_MAX_NAME, dtype=np.float32),
