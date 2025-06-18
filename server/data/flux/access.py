@@ -222,3 +222,59 @@ async def fetch_available_channels(
         time_range.start, time_range.end
     )
     return set(FluxChannel(*channel) for channel in raw_channels)
+
+
+async def recompress_chunks(
+        connection: Connection,
+        source: FluxSource,
+        before: datetime,
+        recompression_threshold: float = 1.2
+):
+    """
+    Compress or recompresses chunks of a hypertable before a specified datetime.
+
+    A chunk is considered for recompression if it meets one of the following criteria:
+    - The chunk is not currently compressed.
+    - The chunk's current disk size is larger than its size immediately after
+      its last compression by the given threshold.
+
+    Changes to already compressed chunks do not get compressed automatically and
+    require a manual recompression to keep the size small.
+
+    :param connection: The database connection.
+    :param source: The flux source specifying the hypertable.
+    :param before: A datetime indicating that only chunks fully before this
+                   time should be considered.
+    :param recompression_threshold: The factor by which the current size must
+                                    exceed the post-compression size to trigger
+                                    a recompression (e.g., 1.1 for 10% larger).
+    """
+    chunks = await connection.fetch(
+        f"""
+            SELECT
+              c.chunk_schema,
+              c.chunk_name,
+              cs.after_compression_total_bytes,
+              s.total_bytes
+            FROM timescaledb_information.chunks c
+            LEFT JOIN chunk_compression_stats('{source.table_name}') cs ON c.chunk_schema = cs.chunk_schema AND c.chunk_name = cs.chunk_name
+            LEFT JOIN chunks_detailed_size('{source.table_name}') s ON c.chunk_schema = s.chunk_schema AND c.chunk_name = s.chunk_name
+            WHERE c.hypertable_name = $1 AND c.range_end < $2
+            ORDER BY c.range_start
+        """,
+        source.table_name, before
+    )
+
+    for chunk in chunks:
+        after_compression_bytes = chunk['after_compression_total_bytes']
+        current_bytes = chunk['total_bytes']
+        needs_recompression = (
+                after_compression_bytes is None or
+                (current_bytes is not None and current_bytes > after_compression_bytes * recompression_threshold)
+        )
+
+        if needs_recompression:
+            qualified_chunk_name = f'"{chunk["chunk_schema"]}"."{chunk["chunk_name"]}"'
+            # Complete decompression and recompression is necessary to force a proper recompression.
+            await connection.execute(f"SELECT decompress_chunk('{qualified_chunk_name}')")
+            await connection.execute(f"SELECT compress_chunk('{qualified_chunk_name}')")

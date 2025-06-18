@@ -19,7 +19,7 @@ from sunpy.net.fido_factory import UnifiedResponse
 from sunpy.timeseries import TimeSeries
 
 from data.db import create_db_pool, DbPoolFactory
-from data.flux.access import import_flux
+from data.flux.access import import_flux, recompress_chunks
 from data.flux.spec.channel import FluxChannel, FrequencyBand
 from data.flux.spec.data import FLUX_INDEX_NAME, FLUX_VALUE_NAME, Flux, empty_flux
 from data.flux.spec.source import FluxSource
@@ -229,6 +229,12 @@ async def _process_import_async(
         with log_time(logger, f'Import {time_range}'):
             async with pool.acquire() as connection:
                 await import_flux(connection, source, channels)
+
+        # Workaround for TimescaleDB not recompressing modified chunks automatically.
+        with log_time(logger, f'Recompress before {time_range.end}'):
+            async with pool.acquire() as connection:
+                # Only recompress chunks before this range because the next import might modify this range again.
+                await recompress_chunks(connection, source, time_range.start)
     database_event.set()
 
     # Delete the used files
