@@ -1,13 +1,13 @@
 import asyncio
 import multiprocessing
 import multiprocessing.pool
+import os
 import warnings
 from collections import deque
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import timedelta, datetime, timezone, time, date
 from logging import Logger
 from multiprocessing.managers import SyncManager
-from pathlib import Path
 
 import asyncpg
 import pandas as pd
@@ -239,10 +239,17 @@ async def _process_import_async(
 
     # Delete the used files
     with log_time(logger, f'Cleanup {time_range}'):
-        await asyncio.gather(*(
-            run_in_executor(executor, lambda: Path(path).unlink(missing_ok=True))
+        results = await asyncio.gather(*(
+            run_in_executor(executor, os.remove, path)
             for path in used_files
-        ))
+        ), return_exceptions=True)
+        errors = {
+            path: res
+            for path, res in zip(used_files, results)
+            if res is not None
+        }
+        if len(errors) > 0:
+            logger.warning(f'Failed to delete {len(errors)}/{len(used_files)} files for {time_range}: {errors}')
 
 
 def _process_import_files(
