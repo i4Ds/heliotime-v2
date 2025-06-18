@@ -231,7 +231,7 @@ async def _process_import_async(
                 await import_flux(connection, source, channels)
 
         # Workaround for TimescaleDB not recompressing modified chunks automatically.
-        with log_time(logger, f'Recompress before {time_range.end}'):
+        with log_time(logger, f'Recompress before {time_range.start}'):
             async with pool.acquire() as connection:
                 # Only recompress chunks before this range because the next import might modify this range again.
                 await recompress_chunks(connection, source, time_range.start)
