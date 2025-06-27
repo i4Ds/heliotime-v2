@@ -122,7 +122,13 @@ This document lists the changes @tschai-yim (the initial maintainer of this repo
 - **Problem:** The validity of these patches is questionable, as they are often residue from removed corrupted regions.
 - **Proposed Solution:** Remove these tiny data patches during the cleaning process.
 
-### 6. Archive Import Performance
+### 6. Database Compression Policy
+
+- **Current State:** All chunks older than a month get automatic compressed. (Policy set by [this migration](https://github.com/i4Ds/heliotime-v2/blob/fbc103facce17d84f1e538b776cbf27f3384b4ea/server/migrations/versions/ffe208ef6408_separate_flux_more.py#L117))
+- **Problem:** Updates to already compressed chunks do not get compressed, which leaves freshly imported older data effectively uncompressed. As a [workaround](https://github.com/i4Ds/heliotime-v2/blob/fbc103facce17d84f1e538b776cbf27f3384b4ea/server/importer/flux/archive.py#L233), we currently manually recompress only the `flux_archive` table, as it's by far the biggest.
+- **Proposed Solution:** Manage the compression fully manually without policies, as prematurely compressing not yet fully imported chunks doesn't make sense. TimescaleDB seems to still be developing this feature quite actively (recently renaming the underlying "engine" to [Hypercore](https://docs.tigerdata.com/use-timescale/latest/hypercore/compression-methods/)), so its limitations and capabilities might change.
+
+### 7. Archive Import Performance
 
 - **Current State:** A full archive import takes around 4 days. The process is mainly bottle-necked by Python's slow iteration speed during the `COPY FROM` database insert (~15k rows per second) and is memory intensive (two worker processes each use up to 6GB of memory).
 - **Problem:** The archive import is extremely slow and memory-inefficient.
