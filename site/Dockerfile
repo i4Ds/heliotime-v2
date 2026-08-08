@@ -7,7 +7,7 @@ COPY visx/yarn.lock .
 COPY visx/packages ./packages
 RUN find packages ! -name "package.json" -mindepth 2 -maxdepth 2 -print0 | xargs -0 rm -rf
 
-FROM node:22-bookworm AS builder
+FROM node:25-bookworm AS builder
 
 # Build Visx (limit tsc concurrency — full parallel build OOMs in Docker)
 WORKDIR /app/visx
