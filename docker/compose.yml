@@ -1,5 +1,6 @@
 services:
   db:
+    # Keep on 2.18.x until migrations are updated for newer continuous-aggregate refresh behavior.
     image: timescale/timescaledb:2.18.1-pg16
     command: ${DATABASE_ARGS:-}
     restart: unless-stopped
@@ -14,8 +15,6 @@ services:
       start_period: 10s
       interval: 10s
       retries: 10
-    ports:
-      - ${EXTERNAL_DATABASE_PORT:-5432}:5432
     environment:
       - POSTGRES_USER=${DATABASE_USERNAME:-postgres}
       - POSTGRES_DB=${DATABASE_DATABASE:-postgres}
@@ -76,6 +75,8 @@ services:
       - FLUX_MAX_RESOLUTION
       - FLUX_QUERY_TIMEOUT
       - WEB_CONCURRENCY
+      - CORS_ORIGINS
+      - ENV
   site:
     build:
       context: ./site

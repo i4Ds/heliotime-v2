@@ -1,0 +1,111 @@
+name: Keep updated
+
+on:
+  schedule:
+    # Mondays 06:00 UTC — catch drift between Dependabot PRs
+    - cron: '0 6 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'site/package.json'
+      - 'site/yarn.lock'
+      - 'site/Dockerfile'
+      - 'server/environment.yml'
+      - 'server/conda-lock.yml'
+      - 'server/Dockerfile'
+      - 'docker/**'
+      - '.github/workflows/keep-updated.yml'
+  pull_request:
+    paths:
+      - 'site/package.json'
+      - 'site/yarn.lock'
+      - 'site/Dockerfile'
+      - 'server/environment.yml'
+      - 'server/conda-lock.yml'
+      - 'server/Dockerfile'
+      - 'docker/**'
+      - '.github/workflows/keep-updated.yml'
+  workflow_dispatch:
+
+jobs:
+  site:
+    name: Site build and audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: site/yarn.lock
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install and build Visx
+        run: yarn install --frozen-lockfile && yarn build
+        working-directory: site/visx
+
+      - name: Install site dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build
+        run: yarn build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      - name: Audit (fail on high/critical)
+        run: yarn audit --level high
+        continue-on-error: false
+
+  server-lockfile:
+    name: Conda lockfile freshness
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: '3.12'
+
+      - name: Install conda-lock
+        run: pip install 'conda-lock==2.5.*'
+
+      - name: Regenerate lockfile and diff
+        run: |
+          cp conda-lock.yml conda-lock.yml.bak
+          conda-lock -f environment.yml -p linux-64 -p linux-aarch64 --lockfile conda-lock.yml
+          if ! diff -q conda-lock.yml.bak conda-lock.yml >/dev/null; then
+            echo "::error::server/conda-lock.yml is out of date with environment.yml. Run: cd server && conda-lock -f environment.yml -p linux-64 -p linux-aarch64 --lockfile conda-lock.yml"
+            diff -u conda-lock.yml.bak conda-lock.yml || true
+            exit 1
+          fi
+          echo "conda-lock.yml matches environment.yml"
+
+  docker-compose:
+    name: Compose config validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate dev compose
+        run: docker compose --project-directory . --file ./docker/compose.yml --file ./docker/compose.dev.yml config --quiet
+
+      - name: Validate prod compose
+        env:
+          DATABASE_PASSWORD: ci-test-password
+          CORS_ORIGINS: https://example.org
+        run: docker compose --project-directory . --file ./docker/compose.yml --file ./docker/compose.prod.yml config --quiet

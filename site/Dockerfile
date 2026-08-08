@@ -7,22 +7,27 @@ COPY visx/yarn.lock .
 COPY visx/packages ./packages
 RUN find packages ! -name "package.json" -mindepth 2 -maxdepth 2 -print0 | xargs -0 rm -rf
 
-FROM node:22-bullseye AS builder
+FROM node:22-bookworm AS builder
 
-# Build Visx
+# Build Visx (limit tsc concurrency — full parallel build OOMs in Docker)
 WORKDIR /app/visx
 COPY --from=visx-copier /app .
 RUN --mount=type=cache,target=/usr/local/share/.cache yarn install --frozen-lockfile
 COPY visx .
-RUN yarn build
+ENV PATH="/app/visx/node_modules/.bin:$PATH"
+ENV NODE_OPTIONS=--max-old-space-size=4096
+RUN yarn build:vendor \
+    && yarn babel \
+    && yarn type:clean \
+    && lerna exec --concurrency 2 -- tsc --build
 
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
 # Install dependencies
 COPY package.json .
 COPY yarn.lock .
-RUN --mount=type=cache,target=/usr/local/share/.cache yarn install --frozen-lockfile --ignore-engines
+RUN --mount=type=cache,target=/usr/local/share/.cache yarn install --frozen-lockfile
 
 # Build server
 COPY src ./src
@@ -37,7 +42,7 @@ RUN --mount=type=cache,target=/usr/local/share/.cache yarn build
 
 FROM gcr.io/distroless/nodejs22-debian12:latest
 
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
 COPY --from=builder /app/.next/standalone ./

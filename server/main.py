@@ -7,7 +7,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import FLUX_QUERY_TIMEOUT, FLUX_MAX_RESOLUTION, ONLY_API
+from config import (
+    CORS_ORIGINS,
+    FLUX_QUERY_TIMEOUT,
+    FLUX_MAX_RESOLUTION,
+    IS_PROD,
+    ONLY_API,
+)
 from data.db import create_db_pool, apply_db_migrations
 from data.flux.fetcher import FluxFetcher
 from data.flux.spec.channel import FluxChannel, SATELLITE_COMBINED_ID, FrequencyBand
@@ -50,12 +56,25 @@ async def lifespan(_app: FastAPI):
         live_importer.kill()
 
 
-app = FastAPI(lifespan=lifespan)
+_docs_url = None if IS_PROD else '/docs'
+_redoc_url = None if IS_PROD else '/redoc'
+_openapi_url = None if IS_PROD else '/openapi.json'
+
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
+)
+
+# Never combine wildcard origins with credentials (browser-rejected / unsafe).
+_cors_origins = CORS_ORIGINS if CORS_ORIGINS else (['*'] if not IS_PROD else [])
+_cors_credentials = bool(CORS_ORIGINS)
 
 app.add_middleware(
     CORSMiddleware,  # noqa
-    allow_origins=['*'],  # TODO: make configurable
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

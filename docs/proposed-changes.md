@@ -100,7 +100,7 @@ This document lists the changes @tschai-yim (the initial maintainer of this repo
 
 ### 2. Configurable CORS
 
-- **Current State:** The server currently [allows all origins](https://github.com/i4Ds/heliotime-v2/blob/988681e8c37dfb8b13a679803d72797b53cf1516/server/main.py#L57).
+- **Current State:** ~~The server currently [allows all origins](https://github.com/i4Ds/heliotime-v2/blob/988681e8c37dfb8b13a679803d72797b53cf1516/server/main.py#L57).~~ **Done** — configure via `CORS_ORIGINS` / `ENV` (`server/config.py`, `server/main.py`; required in `compose.prod.yml`).
 - **Problem:** A hardcoded "allow all" CORS policy is insecure and not suitable for all environments.
 - **Proposed Solution:** Make CORS configurable via environment variables.
 

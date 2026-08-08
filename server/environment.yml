@@ -6,18 +6,19 @@ dependencies:
   - conda-lock=2.5
 
   # Base dependencies
-  - fastapi=0.111
+  - fastapi=0.141
   - gunicorn=23.0
-  - typer=0.12
-  - pydantic=2.8
-  - sunpy=5.1
-  - aiohttp=3.9
+  - typer=0.16
+  - pydantic=2.11
+  - sunpy=6.1
+  - aiohttp=3.12
   - pandas=2.2
-  - numpy=1.26
-  - asyncpg=0.29
-  - alembic=1.13
+  - numpy=2.2
+  - asyncpg=0.30
+  - alembic=1.16
   # Used by alembic. Heliotime uses asyncpg
   # TODO: change to asyncpg (https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
   - psycopg2=2.9
 platforms:
   - linux-64
+  - linux-aarch64

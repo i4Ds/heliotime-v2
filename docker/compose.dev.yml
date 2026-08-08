@@ -1,5 +1,8 @@
 services:
   db:
+    # Host access for local tooling (psql, GUI clients). Not used in prod.
+    ports:
+      - ${EXTERNAL_DATABASE_PORT:-5432}:5432
     environment:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-heliotime}
   migration:

@@ -13,5 +13,7 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:?Database password not specified}
+      - ENV=prod
+      - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS must list allowed browser origins, e.g. https://heliotime.org}
   site:
     restart: unless-stopped

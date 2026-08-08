@@ -1,8 +1,10 @@
-FROM mambaorg/micromamba:alpine3.17
+FROM mambaorg/micromamba:alpine3.22
 
 COPY conda-lock.yml ./
+# Ensure the active arch's packages are present (lockfile covers linux-64 + linux-aarch64).
 RUN micromamba install --yes --name base --file conda-lock.yml && \
-    micromamba clean --all --yes
+    micromamba clean --all --yes && \
+    micromamba run -n base python -c "import fastapi, starlette; print(fastapi.__version__, starlette.__version__)"
 
 COPY data ./data
 COPY importer ./importer

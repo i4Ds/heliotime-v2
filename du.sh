@@ -10,18 +10,21 @@
 set -e
 set -o pipefail
 
-# For emphasis and default answers in prompts
-bold=$(tput bold)
-# For errors or fatal issues
-red=$(tput setaf 1)
-# For warnings
-yellow=$(tput setaf 3)
-# For success messages and confirmations
-green=$(tput setaf 2)
-# For paths, code, or values
-cyan=$(tput setaf 6)
-# Resets the font
-default=$(tput sgr0)
+# Color helpers (no-op when stdout is not a terminal / tput unavailable)
+if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+  bold=$(tput bold || true)
+  red=$(tput setaf 1 || true)
+  yellow=$(tput setaf 3 || true)
+  green=$(tput setaf 2 || true)
+  cyan=$(tput setaf 6 || true)
+  default=$(tput sgr0 || true)
+fi
+bold=${bold:-}
+red=${red:-}
+yellow=${yellow:-}
+green=${green:-}
+cyan=${cyan:-}
+default=${default:-}
 
 if [ -z "$1" ]; then
   echo "${red}No arguments passed.${default}"
@@ -44,7 +47,9 @@ compose () {
 }
 
 if [ "$2" == "db:reset" ]; then
-  compose rm --stop --volumes db
+  # Stop dependents first so the DB volume can be removed cleanly.
+  compose stop api importer migration site db 2>/dev/null || true
+  compose rm --stop --force --volumes db
 elif [ "$2" == "deploy" ]; then
   compose up --detach --build "${@:3}"
 else

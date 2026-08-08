@@ -19,3 +19,13 @@ FLUX_QUERY_TIMEOUT = timedelta(seconds=float(os.environ.get('FLUX_QUERY_TIMEOUT'
 
 # Used when running api in Gunicorn workers
 ONLY_API = os.environ.get('ONLY_API', '').lower() == 'true'
+
+# Production disables OpenAPI UI and expects explicit CORS origins
+IS_PROD = os.environ.get('ENV', '').lower() in ('prod', 'production')
+
+# Comma-separated browser origins. Empty means allow all (dev only; never with credentials).
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('CORS_ORIGINS', '').split(',')
+    if origin.strip()
+]
