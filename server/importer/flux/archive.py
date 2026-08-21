@@ -2,6 +2,7 @@ import asyncio
 import multiprocessing
 import multiprocessing.pool
 import os
+import re
 import warnings
 from collections import deque
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -34,12 +35,37 @@ _DOWNLOAD_BACKOFF = timedelta(seconds=30)
 _BATCH_SIZE_DAYS = 30
 # The task's main bottleneck is the database import, so more workers will just be waiting.
 _WORKER_COUNT = 2
+# Older SDAC FITS URLs look like go07950601.fits (satellite 07).
+_OLD_GOES_URL_SAT = re.compile(r'/go(\d{2})\d{6}\.fits(?:$|\?)', re.IGNORECASE)
 
 warnings.filterwarnings(
     'ignore',
     message='This download has been started in a thread which is not the main thread. '
             'You will not be able to interrupt the download.'
 )
+
+
+def _satellite_number_from_url(url: str) -> int | None:
+    match = _OLD_GOES_URL_SAT.search(str(url))
+    return int(match.group(1)) if match else None
+
+
+def _ensure_satellite_number(results: QueryResponse) -> QueryResponse:
+    """SunPy omits SatelliteNumber for older SDAC XRS files; recover it from the URL."""
+    if 'SatelliteNumber' in results.colnames:
+        return results
+    satellites = [_satellite_number_from_url(url) for url in results['url']]
+    if any(sat is None for sat in satellites):
+        missing = [
+            str(url) for url, sat in zip(results['url'], satellites) if sat is None
+        ]
+        raise ValueError(
+            'Could not determine SatelliteNumber for archive results; '
+            f'unparsed urls={missing[:5]}'
+        )
+    results = results.copy()
+    results['SatelliteNumber'] = satellites
+    return results
 
 
 def _select_best_day_source(results: QueryResponse) -> QueryResponseRow:
@@ -72,9 +98,12 @@ async def _search(time_range: DateTimeRange) -> dict[int, UnifiedResponse]:
         ),
         attrs.Instrument("XRS")
     )
-    return {} if len(results[0]) == 0 else {
+    if len(results[0]) == 0:
+        return {}
+    table = _ensure_satellite_number(results[0])
+    return {
         sat_results[0]['SatelliteNumber']: _select_best_sources(sat_results)
-        for sat_results in results[0].group_by('SatelliteNumber').groups
+        for sat_results in table.group_by('SatelliteNumber').groups
     }
 
 
