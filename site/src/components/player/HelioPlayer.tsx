@@ -38,7 +38,7 @@ function Chart({ width, height }: { width: number; height: number }) {
   const brushHeight = height * 0.15;
 
   return (
-    <svg width={width} height={height} className="overflow-visible absolute">
+    <svg width={width} height={height} className="overflow-visible absolute inset-0">
       <MainChart width={width} height={height - (showBrush ? brushHeight + THEME.spacePx(2) : 0)} />
       {showBrush && <BrushChart width={width} height={brushHeight} top={height - brushHeight} />}
     </svg>
@@ -56,12 +56,13 @@ export default function HelioPlayer({ className = '' }: HelioPlayerProps) {
       <HelioPlayerStateProvider chartWidth={width}>
         <HelioPlayerPanProvider>
           <AboutInsert />
-          <div className={`flex flex-col content-center gap-3 overflow-y-hidden ${className}`}>
+          {/* min-h-0: Safari flex children otherwise keep intrinsic min-height and the chart pane can stay at 0. */}
+          <div className={`flex min-h-0 flex-col content-center gap-3 overflow-y-hidden ${className}`}>
             <MaybeHelioView />
             <ChartHeader />
             <div
               ref={parentRef}
-              className="flex-grow select-none touch-none"
+              className="relative min-h-0 flex-1 basis-0 select-none touch-none"
               onContextMenuCapture={(event) => event.preventDefault()}
             >
               {width > 0 && height > 0 && <Chart width={width} height={height} />}
