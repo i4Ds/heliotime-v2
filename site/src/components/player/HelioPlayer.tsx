@@ -34,13 +34,27 @@ function MaybeHelioView() {
 
 function Chart({ width, height }: { width: number; height: number }) {
   const [settings] = usePlayerSettings();
-  const showBrush = height > 300 && settings.showOverview;
-  const brushHeight = height * 0.15;
+  // iPhone chart panes are often ~250–320px; the old height>300 gate hid the overview.
+  const brushGap = THEME.spacePx(2);
+  const minMainHeight = 120;
+  const minBrushHeight = 52;
+  const maxBrushHeight = 88;
+  const showBrush =
+    settings.showOverview && height >= minMainHeight + minBrushHeight + brushGap;
+  const brushHeight = showBrush
+    ? Math.min(maxBrushHeight, Math.max(minBrushHeight, Math.round(height * 0.2)))
+    : 0;
+  const brushTop = height - brushHeight;
 
   return (
     <svg width={width} height={height} className="overflow-visible absolute inset-0">
-      <MainChart width={width} height={height - (showBrush ? brushHeight + THEME.spacePx(2) : 0)} />
-      {showBrush && <BrushChart width={width} height={brushHeight} top={height - brushHeight} />}
+      <MainChart width={width} height={height - (showBrush ? brushHeight + brushGap : 0)} />
+      {showBrush && (
+        // Prefer <g transform> over nested <svg y="..."> — more reliable on iOS Safari.
+        <g transform={`translate(0, ${brushTop})`}>
+          <BrushChart width={width} height={brushHeight} />
+        </g>
+      )}
     </svg>
   );
 }
