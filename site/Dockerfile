@@ -9,7 +9,8 @@ RUN find packages ! -name "package.json" -mindepth 2 -maxdepth 2 -print0 | xargs
 
 FROM node:22-bookworm AS builder
 
-# Build Visx (limit tsc concurrency — full parallel build OOMs in Docker)
+# Build Visx one package at a time. Parallel tsc --build overwrites the same
+# declaration files and can leave them empty ("is not a module").
 WORKDIR /app/visx
 COPY --from=visx-copier /app .
 RUN --mount=type=cache,target=/usr/local/share/.cache yarn install --frozen-lockfile
@@ -19,7 +20,7 @@ ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN yarn build:vendor \
     && yarn babel \
     && yarn type:clean \
-    && lerna exec --concurrency 2 -- tsc --build
+    && lerna exec --concurrency 1 -- tsc --build
 
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
