@@ -1,21 +1,26 @@
 import asyncio
+import logging
 import multiprocessing
 import multiprocessing.pool
 import os
 import re
+import socket
 import warnings
 from collections import deque
 from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import timedelta, datetime, timezone, time, date
 from logging import Logger
 from multiprocessing.managers import SyncManager
 
 import asyncpg
 import pandas as pd
+from astropy.table import vstack
 from parfive import Results
 from sunpy.net import Fido, attrs
 from sunpy.net.base_client import QueryResponseRow
 from sunpy.net.dataretriever import QueryResponse
+from sunpy.net.dataretriever.sources.goes import XRSClient
 from sunpy.net.fido_factory import UnifiedResponse
 from sunpy.timeseries import TimeSeries
 
@@ -30,6 +35,8 @@ from utils.range import DateTimeRange
 from ._base import Importer, ImporterProcess, log_import
 from ._prepare import prepare_flux_channels
 
+_logger = logging.getLogger('importer.archive')
+
 _MAX_DOWNLOAD_TRIES = 5
 _DOWNLOAD_BACKOFF = timedelta(seconds=30)
 _BATCH_SIZE_DAYS = 30
@@ -37,6 +44,35 @@ _BATCH_SIZE_DAYS = 30
 _WORKER_COUNT = 2
 # Older SDAC FITS URLs look like go07950601.fits (satellite 07).
 _OLD_GOES_URL_SAT = re.compile(r'/go(\d{2})\d{6}\.fits(?:$|\?)', re.IGNORECASE)
+# NOAA science netCDF names look like sci_xrsf-l2-avg1m_g08_d19970707_v1-0-0.nc.
+_NOAA_URL_SAT = re.compile(r'_g(\d{2})_d\d{8}_', re.IGNORECASE)
+# SunPy's XRS client queries only umbra.nascom.nasa.gov when the search ends
+# before this instant. That host accepts the connection and then never responds,
+# which froze the archive importer on the 1997-07-07 batch.
+_LEGACY_SDAC_END = datetime(2001, 3, 1, tzinfo=timezone.utc)
+# Science-quality GOES 8+ netCDF on NCEI starts in 1995 and covers the gap.
+_NOAA_COVERAGE_START = datetime(1995, 1, 1, tzinfo=timezone.utc)
+_GOES_8_15_END = datetime(2020, 3, 5, tzinfo=timezone.utc)
+_GOES_R_START = datetime(2017, 2, 7, tzinfo=timezone.utc)
+_GOES_8_15 = tuple(range(8, 16))
+# SunPy 6.1 registers satellites through 18. GOES-19 is the current XRS primary.
+_GOES_R = (16, 17, 18, 19)
+_LEGACY_TIMEOUT_SECONDS = 20
+_NOAA_TIMEOUT_SECONDS = 60
+# SunPy formats the GOES 8-15 filename with {SatelliteNumber:2d}, which is "g 8"
+# for GOES 8/9 and does not match g08/g09.
+_NOAA_8_15_PATTERN = (
+    "https://www.ncei.noaa.gov/data/goes-space-environment-monitor/access/science/xrs/"
+    "goes{SatelliteNumber:02d}/{filename_res}-l2-{Resolution}_science/"
+    "{{year:4d}}/{{month:2d}}/"
+    "sci_{filename_res}-l2-{Resolution}_g{SatelliteNumber:02d}_d{{year:4d}}{{month:2d}}{{day:2d}}_{{}}.nc"
+)
+_NOAA_8_15_PRODUCTS = (
+    ("xrsf", "avg1m"),
+    ("gxrs", "irrad"),
+)
+_skip_legacy_sdac = False
+_xrs_client: XRSClient | None = None
 
 warnings.filterwarnings(
     'ignore',
@@ -46,19 +82,39 @@ warnings.filterwarnings(
 
 
 def _satellite_number_from_url(url: str) -> int | None:
-    match = _OLD_GOES_URL_SAT.search(str(url))
+    text = str(url)
+    match = _OLD_GOES_URL_SAT.search(text) or _NOAA_URL_SAT.search(text)
     return int(match.group(1)) if match else None
 
 
+def _satellite_number_value(value) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {'', '--', 'none', 'nan', 'masked'}:
+        return None
+    try:
+        number = int(text)
+    except ValueError:
+        return None
+    return number if number > 0 else None
+
+
 def _ensure_satellite_number(results: QueryResponse) -> QueryResponse:
-    """SunPy omits SatelliteNumber for older SDAC XRS files; recover it from the URL."""
+    """Fill SatelliteNumber, including legacy SDAC rows that omit it."""
+    urls = [str(url) for url in results['url']]
     if 'SatelliteNumber' in results.colnames:
-        return results
-    satellites = [_satellite_number_from_url(url) for url in results['url']]
-    if any(sat is None for sat in satellites):
-        missing = [
-            str(url) for url, sat in zip(results['url'], satellites) if sat is None
-        ]
+        existing = list(results['SatelliteNumber'])
+    else:
+        existing = [None] * len(urls)
+    satellites = []
+    missing = []
+    for value, url in zip(existing, urls):
+        number = _satellite_number_value(value) or _satellite_number_from_url(url)
+        if number is None:
+            missing.append(url)
+        satellites.append(number)
+    if missing:
         raise ValueError(
             'Could not determine SatelliteNumber for archive results; '
             f'unparsed urls={missing[:5]}'
@@ -89,20 +145,138 @@ def _select_best_sources(results: QueryResponse) -> UnifiedResponse:
     ))
 
 
-async def _search(time_range: DateTimeRange) -> dict[int, UnifiedResponse]:
-    results = Fido.search(
+def _xrs() -> XRSClient:
+    global _xrs_client
+    if _xrs_client is None:
+        _xrs_client = XRSClient()
+    return _xrs_client
+
+
+def _empty_results() -> QueryResponse:
+    return QueryResponse([], client=_xrs())
+
+
+@contextmanager
+def _socket_timeout(seconds: float):
+    """urlopen has no timeout unless the process default is set."""
+    previous = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(seconds)
+    try:
+        yield
+    finally:
+        socket.setdefaulttimeout(previous)
+
+
+def _search_noaa_science(time_range: DateTimeRange) -> QueryResponse:
+    """Science-quality XRS on NCEI, including dates before SunPy's 2001-03-01 cutoff."""
+    client = _xrs()
+    matchdict = client._get_match_dict(
         attrs.Time(
             time_range.start,
             # Search treats end as inclusive
             time_range.end - timedelta(milliseconds=1)
         ),
-        attrs.Instrument("XRS")
+        attrs.Instrument("XRS"),
     )
-    if len(results[0]) == 0:
+    metalist = []
+    if time_range.start < _GOES_8_15_END:
+        for satellite in _GOES_8_15:
+            for filename_res, resolution in _NOAA_8_15_PRODUCTS:
+                metalist.extend(client._get_metalist_fn(
+                    matchdict, _NOAA_8_15_PATTERN,
+                    SatelliteNumber=satellite,
+                    filename_res=filename_res,
+                    Resolution=resolution,
+                ))
+    if time_range.end > _GOES_R_START:
+        for satellite in _GOES_R:
+            for resolution in ('flx1s', 'avg1m'):
+                metalist.extend(client._get_metalist_fn(
+                    matchdict, client.pattern_r,
+                    SatelliteNumber=satellite,
+                    Resolution=resolution,
+                ))
+    if len(metalist) == 0:
+        return _empty_results()
+    return QueryResponse(metalist, client=client)
+
+
+def _search_legacy_sdac(time_range: DateTimeRange) -> QueryResponse:
+    """GOES 2-7 daily FITS. SunPy reads these from umbra.nascom.nasa.gov."""
+    global _skip_legacy_sdac
+    if _skip_legacy_sdac or time_range.start >= _LEGACY_SDAC_END:
+        return _empty_results()
+    end = min(time_range.end, _LEGACY_SDAC_END)
+    if time_range.start >= end:
+        return _empty_results()
+    try:
+        with _socket_timeout(_LEGACY_TIMEOUT_SECONDS):
+            results = Fido.search(
+                attrs.Time(time_range.start, end - timedelta(milliseconds=1)),
+                attrs.Instrument("XRS"),
+            )
+    except Exception as exc:
+        # One dead listing would otherwise be retried for every 30-day batch.
+        _skip_legacy_sdac = True
+        _logger.warning(
+            'Legacy SDAC archive is unreachable; continuing with NOAA science data '
+            f'when it covers this range: {exc}'
+        )
+        return _empty_results()
+    for table in results:
+        if len(table) > 0 and 'url' in table.colnames:
+            return table
+    return _empty_results()
+
+
+def _combine_results(tables: list[QueryResponse]) -> QueryResponse:
+    nonempty = [table for table in tables if len(table) > 0]
+    if len(nonempty) == 0:
+        return _empty_results()
+    if len(nonempty) == 1:
+        return nonempty[0]
+    return vstack(nonempty, join_type='outer', metadata_conflicts='silent')
+
+
+async def _search(time_range: DateTimeRange) -> dict[int, UnifiedResponse]:
+    noaa_error = None
+    try:
+        with _socket_timeout(_NOAA_TIMEOUT_SECONDS):
+            noaa = _search_noaa_science(time_range)
+    except Exception as exc:
+        noaa = None
+        noaa_error = exc
+        _logger.warning(f'NOAA science search failed for {time_range}: {exc}')
+
+    # umbra.nascom.nasa.gov never answers. Don't wait on it when NOAA already
+    # has this batch; that hung listing is what froze the importer at 1997-07-06.
+    legacy_range = None
+    if noaa is None or len(noaa) == 0:
+        if time_range.start < _LEGACY_SDAC_END:
+            legacy_range = time_range
+    elif time_range.start < _NOAA_COVERAGE_START:
+        legacy_range = DateTimeRange(time_range.start, min(time_range.end, _NOAA_COVERAGE_START))
+    legacy = _search_legacy_sdac(legacy_range) if legacy_range is not None else _empty_results()
+
+    if noaa_error is not None and len(legacy) == 0:
+        raise RuntimeError(f'Archive search failed for {time_range}') from noaa_error
+    if (
+            len(legacy) == 0
+            and (noaa is None or len(noaa) == 0)
+            and time_range.start < _NOAA_COVERAGE_START
+            and _skip_legacy_sdac
+    ):
+        # GOES 2-7 lives only on the legacy archive. Skipping would punch a permanent hole.
+        raise RuntimeError(
+            f'Legacy SDAC archive is unreachable and NOAA has no science files for {time_range}'
+        )
+
+    tables = [table for table in (noaa, legacy) if table is not None and len(table) > 0]
+    if len(tables) == 0:
         return {}
-    table = _ensure_satellite_number(results[0])
+    table = _ensure_satellite_number(_combine_results(tables))
     return {
-        sat_results[0]['SatelliteNumber']: _select_best_sources(sat_results)
+        int(sat_results[0]['SatelliteNumber']): _select_best_sources(sat_results)
         for sat_results in table.group_by('SatelliteNumber').groups
     }
 
@@ -145,8 +319,13 @@ def _from_timeseries(df: pd.DataFrame, band: FrequencyBand) -> Flux:
     if quality_flag in df.columns:
         df = df[df[quality_flag] == 0]
 
-    # Format data into a Flux series
-    index = df.index.tz_localize(timezone.utc).rename(FLUX_INDEX_NAME)
+    # Format data into a Flux series. FITS indexes are naive; netCDF may already be UTC.
+    index = df.index
+    if getattr(index, 'tz', None) is None:
+        index = index.tz_localize(timezone.utc)
+    else:
+        index = index.tz_convert(timezone.utc)
+    index = index.rename(FLUX_INDEX_NAME)
     return df[name] \
         .set_axis(index)[~index.duplicated()].sort_index() \
         .rename(FLUX_VALUE_NAME).dropna()
@@ -245,6 +424,11 @@ async def _process_import_async(
         channels = {}
         for channel_dict in await asyncio.gather(*channel_futures):
             channels.update(channel_dict)
+        if total_found_files > 0 and len(channels) == 0:
+            # Importing nothing would let the next batch move the cursor past this range.
+            raise RuntimeError(
+                f'Found {total_found_files} archive files for {time_range} but none could be read'
+            )
 
     # Processing uses data from the previous import, so must wait for it to finish.
     last_database_event.wait()
@@ -310,8 +494,12 @@ def _process_import_files(
 
 class ArchiveImporter(Importer):
     """
-    Imports highest resolution data (1s-3s) from the data archives:
+    Imports the highest cadence available from the data archives:
     https://www.ngdc.noaa.gov/stp/satellite/goes-r.html
+
+    GOES 8 and later come from NOAA science-quality netCDF (1-minute averages
+    until high-cadence files exist, then 1s-3s). GOES 2-7 still come from the
+    legacy SDAC FITS archive when that host answers.
 
     Data guides:
     - https://www.ncei.noaa.gov/data/goes-space-environment-monitor/access/science/xrs/GOES_1-15_XRS_Science-Quality_Data_Readme.pdf
