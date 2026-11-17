@@ -64,8 +64,16 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
       - name: Audit (fail on high/critical)
-        run: yarn audit --level high
-        continue-on-error: false
+        run: |
+          set +e
+          yarn audit --level high
+          code=$?
+          set -e
+          # Yarn's exit code is a bit field for every severity it found.
+          # --level only hides lower findings from the log. High is 8 and critical is 16.
+          if [ $((code & 24)) -ne 0 ]; then
+            exit "$code"
+          fi
 
   server-lockfile:
     name: Conda lockfile freshness
@@ -84,16 +92,46 @@ jobs:
       - name: Install conda-lock
         run: pip install 'conda-lock==2.5.*'
 
+      # Compare resolved packages. conda-lock rewrites dependency key order
+      # without changing the packages that get installed.
       - name: Regenerate lockfile and diff
         run: |
           cp conda-lock.yml conda-lock.yml.bak
           conda-lock -f environment.yml -p linux-64 -p linux-aarch64 --lockfile conda-lock.yml
-          if ! diff -q conda-lock.yml.bak conda-lock.yml >/dev/null; then
-            echo "::error::server/conda-lock.yml is out of date with environment.yml. Run: cd server && conda-lock -f environment.yml -p linux-64 -p linux-aarch64 --lockfile conda-lock.yml"
-            diff -u conda-lock.yml.bak conda-lock.yml || true
-            exit 1
-          fi
-          echo "conda-lock.yml matches environment.yml"
+          python - <<'PY'
+          from pathlib import Path
+          from ruamel.yaml import YAML
+
+          yaml = YAML(typ="safe")
+
+          def identity(path):
+              data = yaml.load(Path(path))
+              rows = []
+              for pkg in data["package"]:
+                  digest = pkg.get("hash") or {}
+                  rows.append((
+                      str(pkg.get("platform")),
+                      str(pkg.get("manager")),
+                      str(pkg["name"]),
+                      str(pkg.get("version")),
+                      str(pkg.get("url")),
+                      str(digest.get("sha256") or digest.get("md5")),
+                  ))
+              return rows
+
+          previous = identity("conda-lock.yml.bak")
+          current = identity("conda-lock.yml")
+          if sorted(previous) != sorted(current):
+              removed = sorted(set(previous) - set(current))
+              added = sorted(set(current) - set(previous))
+              print("::error::server/conda-lock.yml does not match environment.yml. Regenerate it with conda-lock 2.5.")
+              for platform, _manager, name, version, _url, _digest in removed:
+                  print(f"- {platform} {name} {version}")
+              for platform, _manager, name, version, _url, _digest in added:
+                  print(f"+ {platform} {name} {version}")
+              raise SystemExit(1)
+          print("conda-lock.yml matches environment.yml")
+          PY
 
   docker-compose:
     name: Compose config validate
