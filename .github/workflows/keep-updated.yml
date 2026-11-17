@@ -108,14 +108,12 @@ jobs:
               data = yaml.load(Path(path))
               rows = []
               for pkg in data["package"]:
-                  digest = pkg.get("hash") or {}
+                  # Ignore the download address. conda-forge rebuilds a package
+                  # without changing its version, and that is not a new dependency.
                   rows.append((
                       str(pkg.get("platform")),
-                      str(pkg.get("manager")),
                       str(pkg["name"]),
                       str(pkg.get("version")),
-                      str(pkg.get("url")),
-                      str(digest.get("sha256") or digest.get("md5")),
                   ))
               return rows
 
@@ -125,13 +123,20 @@ jobs:
               removed = sorted(set(previous) - set(current))
               added = sorted(set(current) - set(previous))
               print("::error::server/conda-lock.yml does not match environment.yml. Regenerate it with conda-lock 2.5.")
-              for platform, _manager, name, version, _url, _digest in removed:
+              for platform, name, version in removed:
                   print(f"- {platform} {name} {version}")
-              for platform, _manager, name, version, _url, _digest in added:
+              for platform, name, version in added:
                   print(f"+ {platform} {name} {version}")
               raise SystemExit(1)
           print("conda-lock.yml matches environment.yml")
           PY
+
+      - name: Keep the regenerated lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda-lock-regenerated
+          path: server/conda-lock.yml
 
   docker-compose:
     name: Compose config validate
