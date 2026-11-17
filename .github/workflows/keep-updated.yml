@@ -92,8 +92,9 @@ jobs:
       - name: Install conda-lock
         run: pip install 'conda-lock==2.5.*'
 
-      # Compare resolved packages. conda-lock rewrites dependency key order
-      # without changing the packages that get installed.
+      # Compare the packages named in environment.yml. A fresh solve also
+      # moves deep dependencies such as hdf5 from one minute to the next,
+      # and that is not a change to this project.
       - name: Regenerate lockfile and diff
         run: |
           cp conda-lock.yml conda-lock.yml.bak
@@ -104,39 +105,48 @@ jobs:
 
           yaml = YAML(typ="safe")
 
+          def direct_names():
+              names = set()
+              in_dependencies = False
+              for line in Path("environment.yml").read_text().splitlines():
+                  if line.startswith("dependencies:"):
+                      in_dependencies = True
+                      continue
+                  if in_dependencies and line and not line.startswith(" "):
+                      break
+                  if not in_dependencies:
+                      continue
+                  text = line.strip()
+                  if not text.startswith("- "):
+                      continue
+                  spec = text[2:].split("#", 1)[0].strip()
+                  if spec:
+                      names.add(spec.split("=")[0].split()[0])
+              return names
+
+          wanted = direct_names()
+
           def identity(path):
               data = yaml.load(Path(path))
-              rows = []
-              for pkg in data["package"]:
-                  # Ignore the download address. conda-forge rebuilds a package
-                  # without changing its version, and that is not a new dependency.
-                  rows.append((
-                      str(pkg.get("platform")),
-                      str(pkg["name"]),
-                      str(pkg.get("version")),
-                  ))
-              return rows
+              return sorted(
+                  (str(pkg.get("platform")), str(pkg["name"]), str(pkg.get("version")))
+                  for pkg in data["package"]
+                  if pkg["name"] in wanted
+              )
 
           previous = identity("conda-lock.yml.bak")
           current = identity("conda-lock.yml")
-          if sorted(previous) != sorted(current):
+          if previous != current:
               removed = sorted(set(previous) - set(current))
               added = sorted(set(current) - set(previous))
-              print("::error::server/conda-lock.yml does not match environment.yml. Regenerate it with conda-lock 2.5.")
+              print("::error::A package named in server/environment.yml resolved to a different version. Regenerate server/conda-lock.yml with conda-lock 2.5.")
               for platform, name, version in removed:
                   print(f"- {platform} {name} {version}")
               for platform, name, version in added:
                   print(f"+ {platform} {name} {version}")
               raise SystemExit(1)
-          print("conda-lock.yml matches environment.yml")
+          print("Direct packages in conda-lock.yml match environment.yml")
           PY
-
-      - name: Keep the regenerated lockfile
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: conda-lock-regenerated
-          path: server/conda-lock.yml
 
   docker-compose:
     name: Compose config validate
