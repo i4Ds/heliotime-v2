@@ -64,8 +64,16 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
       - name: Audit (fail on high/critical)
-        run: yarn audit --level high
-        continue-on-error: false
+        run: |
+          set +e
+          yarn audit --level high
+          code=$?
+          set -e
+          # Yarn's exit code is a bit field for every severity it found.
+          # --level only hides lower findings from the log. High is 8 and critical is 16.
+          if [ $((code & 24)) -ne 0 ]; then
+            exit "$code"
+          fi
 
   server-lockfile:
     name: Conda lockfile freshness
@@ -84,16 +92,61 @@ jobs:
       - name: Install conda-lock
         run: pip install 'conda-lock==2.5.*'
 
+      # Compare the packages named in environment.yml. A fresh solve also
+      # moves deep dependencies such as hdf5 from one minute to the next,
+      # and that is not a change to this project.
       - name: Regenerate lockfile and diff
         run: |
           cp conda-lock.yml conda-lock.yml.bak
           conda-lock -f environment.yml -p linux-64 -p linux-aarch64 --lockfile conda-lock.yml
-          if ! diff -q conda-lock.yml.bak conda-lock.yml >/dev/null; then
-            echo "::error::server/conda-lock.yml is out of date with environment.yml. Run: cd server && conda-lock -f environment.yml -p linux-64 -p linux-aarch64 --lockfile conda-lock.yml"
-            diff -u conda-lock.yml.bak conda-lock.yml || true
-            exit 1
-          fi
-          echo "conda-lock.yml matches environment.yml"
+          python - <<'PY'
+          from pathlib import Path
+          from ruamel.yaml import YAML
+
+          yaml = YAML(typ="safe")
+
+          def direct_names():
+              names = set()
+              in_dependencies = False
+              for line in Path("environment.yml").read_text().splitlines():
+                  if line.startswith("dependencies:"):
+                      in_dependencies = True
+                      continue
+                  if in_dependencies and line and not line.startswith(" "):
+                      break
+                  if not in_dependencies:
+                      continue
+                  text = line.strip()
+                  if not text.startswith("- "):
+                      continue
+                  spec = text[2:].split("#", 1)[0].strip()
+                  if spec:
+                      names.add(spec.split("=")[0].split()[0])
+              return names
+
+          wanted = direct_names()
+
+          def identity(path):
+              data = yaml.load(Path(path))
+              return sorted(
+                  (str(pkg.get("platform")), str(pkg["name"]), str(pkg.get("version")))
+                  for pkg in data["package"]
+                  if pkg["name"] in wanted
+              )
+
+          previous = identity("conda-lock.yml.bak")
+          current = identity("conda-lock.yml")
+          if previous != current:
+              removed = sorted(set(previous) - set(current))
+              added = sorted(set(current) - set(previous))
+              print("::error::A package named in server/environment.yml resolved to a different version. Regenerate server/conda-lock.yml with conda-lock 2.5.")
+              for platform, name, version in removed:
+                  print(f"- {platform} {name} {version}")
+              for platform, name, version in added:
+                  print(f"+ {platform} {name} {version}")
+              raise SystemExit(1)
+          print("Direct packages in conda-lock.yml match environment.yml")
+          PY
 
   docker-compose:
     name: Compose config validate
