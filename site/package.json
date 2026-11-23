@@ -38,7 +38,7 @@
     "@visx/tooltip": "file:./visx/packages/visx-tooltip",
     "d3-array": "^3.2.4",
     "d3-interpolate": "^3.0.1",
-    "d3-scale": "^4.0.2",
+    "d3-scale": "^4.0.3",
     "next": "^15.5.29",
     "nuqs": "^2.4.3",
     "react": "^19.2.8",
