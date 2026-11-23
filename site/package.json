@@ -24,7 +24,7 @@
     "@radix-ui/react-portal": "^1.1.9",
     "@radix-ui/react-switch": "^1.2.5",
     "@react-spring/web": "^9.7.5",
-    "@tanstack/react-query": "^5.80.7",
+    "@tanstack/react-query": "^5.108.2",
     "@visx/axis": "file:./visx/packages/visx-axis",
     "@visx/curve": "file:./visx/packages/visx-curve",
     "@visx/event": "file:./visx/packages/visx-event",
